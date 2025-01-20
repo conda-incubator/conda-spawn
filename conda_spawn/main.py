@@ -1,6 +1,7 @@
 """ """
 
 from __future__ import annotations
+
 from os.path import expanduser, expandvars, abspath
 from pathlib import Path
 from typing import Type, Iterable
@@ -14,20 +15,26 @@ from .shell import SHELLS, Shell, detect_shell_class
 
 
 def spawn(
-    prefix: Path, shell_cls: Shell | None = None, command: Iterable[str] | None = None
+    prefix: Path,
+    shell_cls: Shell | None = None,
+    stack: bool = False,
+    command: Iterable[str] | None = None,
 ) -> int:
     if shell_cls is None:
         shell_cls = detect_shell_class()
-    return shell_cls(prefix).spawn(command=command)
+    return shell_cls(prefix, stack=stack).spawn(command=command)
 
 
-def hook(prefix: Path, shell_cls: Shell | None = None) -> int:
+def hook(
+    prefix: Path,
+    shell_cls: Shell | None = None,
+    stack: bool = False,
+) -> int:
     if shell_cls is None:
         shell_cls = detect_shell_class()
-    script = shell_cls(prefix).script()
-    prompt = shell_cls(prefix).prompt()
-    print(script)
-    print(prompt)
+    shell_inst = shell_cls(prefix, stack=stack)
+    print(shell_inst.script())
+    print(shell_inst.prompt())
     return 0
 
 

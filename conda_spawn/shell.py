@@ -29,10 +29,15 @@ log = getLogger(f"conda.{__name__}")
 class Shell:
     Activator: activate._Activator
 
-    def __init__(self, prefix: Path):
+    def __init__(self, prefix: Path, stack: bool = False):
         self.prefix = prefix
         self._prefix_str = str(prefix)
-        self._activator = self.Activator(["activate", str(self.prefix)])
+        self._stack = stack
+        self._activator_args = ["activate"]
+        if self._stack:
+            self._activator_args.append("--stack")
+        self._activator_args.append(str(prefix))
+        self._activator = self.Activator(self._activator_args)
         self._files_to_remove = []
 
     def spawn(self, prefix: Path) -> int:
@@ -51,9 +56,7 @@ class Shell:
         raise NotImplementedError
 
     def prompt_modifier(self) -> str:
-        conda_default_env = os.getenv(
-            "CONDA_DEFAULT_ENV", self._activator._default_env(self._prefix_str)
-        )
+        conda_default_env = self._activator._default_env(self._prefix_str)
         return self._activator._prompt_modifier(self._prefix_str, conda_default_env)
 
     def executable(self) -> str:

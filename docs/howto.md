@@ -48,3 +48,12 @@ conda create -n new-env python numpy
 eval "$(conda spawn --hook --shell powershell -n new-env)"
 python -c "import numpy"
 ```
+
+## Nest activated environments
+
+Nested activation is disallowed by default. Instead we strongly recommend to only activate one environment at a time. Either open a new terminal session (window, tab, `screen`, `tmux`...) or close the current one with `exit` or <kbd>Ctrl</kbd>+<kbd>D</kbd>, and then run `conda spawn` again.
+
+That said, if you really want to reuse the current session, you can use one of these two nesting flags:
+
+- `--replace` will deactivate the current environment and activate the new one. Only the binaries in the new environment will be visible in `PATH`.
+- `--stack` will _not_ deactivate the current environment. Instead, it will activate the new one on top. Binaries in both environments will be visible in `PATH`, but the ones from the new environment will have precedence.

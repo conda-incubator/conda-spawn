@@ -1,9 +1,11 @@
 import sys
 
 import pytest
-from conda_spawn.shell import PosixShell, PowershellShell, CmdExeShell
-
 from subprocess import PIPE, check_output
+
+from conda.base.context import reset_context
+
+from conda_spawn.shell import PosixShell, PowershellShell, CmdExeShell
 
 
 @pytest.fixture(scope="session")
@@ -16,6 +18,13 @@ def simple_env(session_tmp_env):
 def conda_env(session_tmp_env):
     with session_tmp_env("conda") as prefix:
         yield prefix
+
+
+@pytest.fixture
+def no_prompt(monkeypatch):
+    monkeypatch.setenv("CONDA_CHANGEPS1", "false")
+    reset_context()
+    yield
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
@@ -101,12 +110,13 @@ def test_hooks_integration_cmd(simple_env, tmp_path):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
-def test_condabin_first_posix_shell(simple_env, conda_env):
+def test_condabin_first_posix_shell(simple_env, conda_env, no_prompt):
     shell = PosixShell(simple_env)
     proc = shell.spawn_tty()
     proc.sendline('echo "$PATH"')
     proc.sendeof()
     out = proc.read().decode()
+    print(out)
     assert sys.prefix in out
     assert str(simple_env) in out
     assert out.index(sys.prefix) < out.index(str(simple_env))
@@ -115,13 +125,14 @@ def test_condabin_first_posix_shell(simple_env, conda_env):
     proc = shell.spawn_tty()
     proc.sendline("which conda")
     proc.sendeof()
+    print(out)
     out = proc.read().decode()
     assert f"{sys.prefix}/condabin/conda" in out
     assert str(conda_env) not in out
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Powershell only tested on Windows")
-def test_condabin_first_powershell(simple_env, conda_env):
+def test_condabin_first_powershell(simple_env, conda_env, no_prompt):
     shell = PowershellShell(simple_env)
     with shell.spawn_popen(
         command=["echo", "$env:PATH"], stdout=PIPE, text=True
@@ -144,7 +155,7 @@ def test_condabin_first_powershell(simple_env, conda_env):
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Cmd.exe only tested on Windows")
-def test_condabin_first_cmd(simple_env, conda_env):
+def test_condabin_first_cmd(simple_env, conda_env, no_prompt):
     shell = CmdExeShell(simple_env)
     with shell.spawn_popen(command=["echo", "%PATH%"], stdout=PIPE, text=True) as proc:
         out, _ = proc.communicate(timeout=5)
