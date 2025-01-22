@@ -163,6 +163,7 @@ class ZshShell(PosixShell):
     def executable(self):
         return "zsh"
 
+
 class ShellShell(PosixShell):
     def executable(self):
         return "shell"
