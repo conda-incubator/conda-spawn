@@ -140,7 +140,7 @@ class PosixShell(Shell):
             # We set the PS1 prompt outside the script because it's otherwise invisible.
             # stty echo is equivalent to `child.setecho(True)` but the latter didn't work
             # reliably across all shells and OSs.
-            child.sendline(f' source "{f.name}" && {self.prompt()} && stty echo')
+            child.sendline(f' . "{f.name}" && {self.prompt()} && stty echo')
             os.read(child.child_fd, 4096)  # consume buffer before interact
             if Path(executable).name == "zsh":
                 # zsh also needs this for a truly silent activation
@@ -165,6 +165,8 @@ class ZshShell(PosixShell):
 
 
 class ShellShell(PosixShell):
+    Activator = activate.ShellActivator
+
     def executable(self):
         return "shell"
 
