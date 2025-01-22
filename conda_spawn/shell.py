@@ -308,6 +308,8 @@ def default_shell_class():
 def detect_shell_class():
     try:
         name, _ = shellingham.detect_shell()
+        if sys.platform == "win32" and name == "cmd" and "SHELL" in os.environ:
+            name = os.environ["SHELL"]
     except shellingham.ShellDetectionFailure:
         return default_shell_class()
     else:
