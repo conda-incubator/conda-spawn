@@ -830,9 +830,9 @@ def backslash_to_forwardslash(
 
 
 class PosixActivator(_Activator):
-    pathsep_join = ":".join
+    pathsep_join = ";".join if on_win else ":".join
     sep = "/"
-    path_conversion = staticmethod(win_path_to_unix if on_win else _path_identity)
+    path_conversion = staticmethod(win_path_to_unix if False else _path_identity)
     script_extension = ".sh"
     tempfile_extension = None  # output to stdout
     command_join = "\n"
