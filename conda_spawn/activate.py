@@ -1082,6 +1082,7 @@ class ShellActivator(PosixActivator):
     path_conversion = staticmethod(_path_identity)
     run_script_tmpl = 'source "%s"'
 
+
 activator_map: dict[str, type[_Activator]] = {
     "posix": PosixActivator,
     "ash": PosixActivator,
