@@ -830,9 +830,9 @@ def backslash_to_forwardslash(
 
 
 class PosixActivator(_Activator):
-    pathsep_join = ";".join if on_win else ":".join
+    pathsep_join = ":".join
     sep = "/"
-    path_conversion = staticmethod(win_path_to_unix if False else _path_identity)
+    path_conversion = staticmethod(win_path_to_unix if on_win else _path_identity)
     script_extension = ".sh"
     tempfile_extension = None  # output to stdout
     command_join = "\n"
@@ -840,7 +840,7 @@ class PosixActivator(_Activator):
     unset_var_tmpl = "unset %s"
     export_var_tmpl = "export %s='%s'"
     set_var_tmpl = "%s='%s'"
-    run_script_tmpl = 'source "%s"'
+    run_script_tmpl = '. "%s"'
 
     hook_source_path = Path(
         CONDA_PACKAGE_ROOT,
@@ -1077,6 +1077,11 @@ class PowerShellActivator(_Activator):
         return "Remove-Variable CondaModuleArgs"
 
 
+class ShellActivator(PosixActivator):
+    pathsep_join = ";".join if on_win else ":".join
+    path_conversion = staticmethod(_path_identity)
+    run_script_tmpl = 'source "%s"'
+
 activator_map: dict[str, type[_Activator]] = {
     "posix": PosixActivator,
     "ash": PosixActivator,
@@ -1089,4 +1094,5 @@ activator_map: dict[str, type[_Activator]] = {
     "cmd.exe": CmdExeActivator,
     "fish": FishActivator,
     "powershell": PowerShellActivator,
+    "shell": ShellActivator,
 }
