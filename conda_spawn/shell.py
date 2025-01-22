@@ -163,6 +163,10 @@ class ZshShell(PosixShell):
     def executable(self):
         return "zsh"
 
+class ShellShell(PosixShell):
+    def executable(self):
+        return "shell"
+
 
 class CshShell(Shell):
     pass
@@ -260,6 +264,7 @@ SHELLS: dict[str, type[Shell]] = {
     "posix": PosixShell,
     "powershell": PowershellShell,
     "pwsh": PowershellShell,
+    "shell": ShellShell,
     "tcsh": CshShell,
     "xonsh": XonshShell,
     "zsh": ZshShell,
