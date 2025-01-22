@@ -840,7 +840,7 @@ class PosixActivator(_Activator):
     unset_var_tmpl = "unset %s"
     export_var_tmpl = "export %s='%s'"
     set_var_tmpl = "%s='%s'"
-    run_script_tmpl = '. "%s"'
+    run_script_tmpl = 'source "%s"'
 
     hook_source_path = Path(
         CONDA_PACKAGE_ROOT,
