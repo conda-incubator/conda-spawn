@@ -19,8 +19,14 @@ def configure_parser(parser: argparse.ArgumentParser):
     from .shell import SHELLS
 
     add_parser_help(parser)
-    add_parser_prefix(parser, prefix_required=True)
+    add_parser_prefix(parser, prefix_required=False)
 
+    parser.add_argument(
+        "env_name",
+        metavar="ENV_NAME",
+        nargs="?",
+        help="Name of the environment to spawn",
+    )
     parser.add_argument(
         "command",
         metavar="COMMAND [args]",
@@ -77,6 +83,10 @@ def execute(args: argparse.Namespace) -> int:
         environment_speficier_to_path,
         shell_specifier_to_shell,
     )
+
+    # Treat env_name as the environment name if provided
+    if args.env_name and not args.env_name.startswith("-"):
+        args.name = args.env_name
 
     if args.stack and args.replace:
         raise ArgumentError(
