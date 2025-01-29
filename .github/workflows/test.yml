@@ -46,7 +46,6 @@ jobs:
           environments: ${{ env.PIXI_ENV_NAME }}
       - name: Setup project
         run: |
-          pixi run --environment ${{ env.PIXI_ENV_NAME }} dev
           echo "channels: [conda-forge]" > .pixi/envs/${{ env.PIXI_ENV_NAME }}/.condarc
           pixi run --environment ${{ env.PIXI_ENV_NAME }} conda info
       - name: Run tests
@@ -68,8 +67,5 @@ jobs:
       - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659 # v0.8.1
         with:
           environments: build
-      - name: Setup project
-        run: |
-          pixi run --environment build dev
       - name: Build recipe
         run: pixi run --environment build build

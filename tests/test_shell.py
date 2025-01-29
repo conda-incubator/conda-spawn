@@ -64,7 +64,7 @@ def test_cmd(simple_env):
 
 
 def test_hooks(conda_cli, simple_env):
-    out, err, rc = conda_cli("spawn", "--hook", "-p", simple_env)
+    out, err, rc = conda_cli("spawn", "--hook", simple_env)
     print(out)
     print(err, file=sys.stderr)
     assert not rc
@@ -75,7 +75,7 @@ def test_hooks(conda_cli, simple_env):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Only tested on Unix")
 def test_hooks_integration_posix(simple_env, tmp_path):
-    hook = f"{sys.executable} -m conda spawn --hook --shell posix -p '{simple_env}'"
+    hook = f"{sys.executable} -m conda spawn --hook --shell posix '{simple_env}'"
     script = f'eval "$({hook})"\nenv | sort'
     script_path = tmp_path / "script-eval.sh"
     script_path.write_text(script)
@@ -87,7 +87,7 @@ def test_hooks_integration_posix(simple_env, tmp_path):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Powershell only tested on Windows")
 def test_hooks_integration_powershell(simple_env, tmp_path):
-    hook = f"{sys.executable} -m conda spawn --hook --shell powershell -p {simple_env}"
+    hook = f"{sys.executable} -m conda spawn --hook --shell powershell {simple_env}"
     script = f"{hook} | Out-String | Invoke-Expression\r\nls env:"
     script_path = tmp_path / "script-eval.ps1"
     script_path.write_text(script)
@@ -99,7 +99,7 @@ def test_hooks_integration_powershell(simple_env, tmp_path):
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Cmd.exe only tested on Windows")
 def test_hooks_integration_cmd(simple_env, tmp_path):
-    hook = f"{sys.executable} -m conda spawn --hook --shell cmd -p {simple_env}"
+    hook = f"{sys.executable} -m conda spawn --hook --shell cmd {simple_env}"
     script = f"FOR /F \"tokens=*\" %%g IN ('{hook}') do @CALL %%g\r\nset"
     script_path = tmp_path / "script-eval.bat"
     script_path.write_text(script)

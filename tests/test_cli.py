@@ -12,12 +12,12 @@ def test_cli(monkeypatch, conda_cli):
 
 def test_nesting_disallowed(monkeypatch, conda_cli):
     monkeypatch.setenv("CONDA_SPAWN", "1")
-    conda_cli("spawn", "-p", sys.prefix, "--hook", raises=CondaError)
+    conda_cli("spawn", sys.prefix, "--hook", raises=CondaError)
 
 
 def test_nesting_replace(monkeypatch, conda_cli):
     monkeypatch.setenv("CONDA_SPAWN", "1")
-    out, err, rc = conda_cli("spawn", "-p", sys.prefix, "--hook", "--replace")
+    out, err, rc = conda_cli("spawn", sys.prefix, "--hook", "--replace")
     assert sys.prefix in out
     assert not err
     assert not rc
@@ -25,7 +25,7 @@ def test_nesting_replace(monkeypatch, conda_cli):
 
 def test_nesting_stack(monkeypatch, conda_cli):
     monkeypatch.setenv("CONDA_SPAWN", "1")
-    out, err, rc = conda_cli("spawn", "-p", sys.prefix, "--hook", "--stack")
+    out, err, rc = conda_cli("spawn", sys.prefix, "--hook", "--stack")
     assert sys.prefix in out
     assert not err
     assert not rc

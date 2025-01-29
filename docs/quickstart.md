@@ -13,7 +13,7 @@ The typical workflow looks like this:
 python not found
 ~ $ which conda
 /Users/user/Miniforge/condabin/conda
-~ $ conda spawn -n base
+~ $ conda spawn base
 (base) ~ $ which python
 /Users/user/Miniforge/bin/python
 (base) ~ $ python my_project.py
@@ -45,7 +45,7 @@ After this, you might want to {ref}`shell-cleanup`.
 To activate an environment named `my-project`:
 
 ```bash
-conda spawn -n my-project
+conda spawn my-project
 ```
 
 To deactivate, exit the process with <kbd>Ctrl</kbd>+<kbd>D</kbd>, or run the command `exit`.

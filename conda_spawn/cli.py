@@ -8,10 +8,10 @@ import argparse
 import os
 from textwrap import dedent
 
-from conda.exceptions import CondaError, ArgumentError
+from conda.base.context import locate_prefix_by_name
+from conda.exceptions import CondaError, ArgumentError, EnvironmentLocationNotFound
 from conda.cli.conda_argparse import (
     add_parser_help,
-    add_parser_prefix,
 )
 
 
@@ -19,8 +19,12 @@ def configure_parser(parser: argparse.ArgumentParser):
     from .shell import SHELLS
 
     add_parser_help(parser)
-    add_parser_prefix(parser, prefix_required=True)
 
+    parser.add_argument(
+        "environment",
+        help="Environment to activate. Can be either a name or a path. Paths are only detected "
+        "if they contain a (back)slash. Use the ./env idiom environments in working directory.",
+    )
     parser.add_argument(
         "command",
         metavar="COMMAND [args]",
@@ -74,7 +78,6 @@ def execute(args: argparse.Namespace) -> int:
     from .main import (
         hook,
         spawn,
-        environment_speficier_to_path,
         shell_specifier_to_shell,
     )
 
@@ -95,6 +98,7 @@ def execute(args: argparse.Namespace) -> int:
             dedent(
                 f"""
                 Detected active 'conda spawn' session{env_info}.
+
                 Nested activation is disallowed by default.
                 Please exit the current session before starting a new one by running 'exit'.
                 Alternatively, check the usage of --replace and/or --stack.
@@ -102,8 +106,14 @@ def execute(args: argparse.Namespace) -> int:
             ).lstrip()
         )
 
-    prefix = environment_speficier_to_path(args.name, args.prefix)
+    if "/" in args.environment or "\\" in args.environment:
+        prefix = os.path.expanduser(os.path.expandvars(args.environment))
+        if not os.path.isfile(os.path.join(args.environment, "conda-meta", "history")):
+            raise EnvironmentLocationNotFound(prefix)
+    else:
+        prefix = locate_prefix_by_name(args.environment)
     shell = shell_specifier_to_shell(args.shell)
+
     if args.hook:
         if args.command:
             raise ArgumentError("COMMAND cannot be provided with --hook.")
