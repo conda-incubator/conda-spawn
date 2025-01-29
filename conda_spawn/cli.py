@@ -23,7 +23,7 @@ def configure_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         "environment",
         help="Environment to activate. Can be either a name or a path. Paths are only detected "
-        "if they contain a (back)slash. Use the ./env idiom environments in working directory."
+        "if they contain a (back)slash. Use the ./env idiom environments in working directory.",
     )
     parser.add_argument(
         "command",
@@ -98,7 +98,7 @@ def execute(args: argparse.Namespace) -> int:
             dedent(
                 f"""
                 Detected active 'conda spawn' session{env_info}.
-                
+
                 Nested activation is disallowed by default.
                 Please exit the current session before starting a new one by running 'exit'.
                 Alternatively, check the usage of --replace and/or --stack.
