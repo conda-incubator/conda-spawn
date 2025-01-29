@@ -25,19 +25,19 @@ For in-script usage, please consider these replacements for `conda activate`:
 For Unix shell scripts:
 
 ```bash
-eval "$(conda spawn --hook --shell posix -n <ENV-NAME>)"
+eval "$(conda spawn --hook --shell posix <ENV-NAME>)"
 ```
 
 For Windows CMD scripts:
 
 ```batch
-FOR /F "tokens=*" %%g IN ('conda spawn --hook --shell cmd -n <ENV-NAME>') do @CALL %%g
+FOR /F "tokens=*" %%g IN ('conda spawn --hook --shell cmd <ENV-NAME>') do @CALL %%g
 ```
 
 For Windows Powershell scripts:
 
 ```powershell
-conda spawn --hook --shell powershell -n <ENV-NAME> | Out-String | Invoke-Expression
+conda spawn --hook --shell powershell <ENV-NAME> | Out-String | Invoke-Expression
 ```
 
 For example, if you want to create a new environment and activate it, it would look like this:
@@ -45,7 +45,7 @@ For example, if you want to create a new environment and activate it, it would l
 ```bash
 # Assumes `conda` is in PATH
 conda create -n new-env python numpy
-eval "$(conda spawn --hook --shell powershell -n new-env)"
+eval "$(conda spawn --hook --shell powershell new-env)"
 python -c "import numpy"
 ```
 
