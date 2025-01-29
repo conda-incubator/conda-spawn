@@ -65,11 +65,11 @@ def configure_parser(parser: argparse.ArgumentParser):
         """
         Examples for --hook usage in different shells:
           POSIX:
-            source "$(conda spawn --hook -n ENV-NAME)"
+            source "$(conda spawn --hook ENV-NAME)"
           CMD:
-            FOR /F "tokens=*" %%g IN ('conda spawn --hook -n ENV-NAME') do @CALL %%g
+            FOR /F "tokens=*" %%g IN ('conda spawn --hook ENV-NAME') do @CALL %%g
           Powershell:
-            conda spawn --hook -n ENV-NAME | Out-String | Invoke-Expression
+            conda spawn --hook ENV-NAME | Out-String | Invoke-Expression
         """
     ).lstrip()
 

@@ -10,7 +10,7 @@ Activate conda environments in new shell processes.
 
 `conda spawn` is a replacement subcommand for the `conda activate` and `conda deactivate` workflow
 
-Instead of writing state to your current shell session, `conda spawn -n ENV-NAME` will start a new shell with your activated environment. To deactivate, exit the process with <kbd>Ctrl</kbd>+<kbd>D</kbd>, or run the command `exit`.
+Instead of writing state to your current shell session, `conda spawn ENV-NAME` will start a new shell with your activated environment. To deactivate, exit the process with <kbd>Ctrl</kbd>+<kbd>D</kbd>, or run the command `exit`.
 
 ## Installation
 
