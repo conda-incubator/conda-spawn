@@ -184,6 +184,7 @@ class ShellShell(PosixShell):
                 mode="w",
             ) as f:
                 f.write(self.script())
+                f.write(f"{self.prompt()}\n")
                 if command:
                     f.write(" ".join(command))
             return subprocess.Popen(
