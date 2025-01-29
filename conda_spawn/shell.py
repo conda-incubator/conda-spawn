@@ -184,6 +184,8 @@ class ShellShell(PosixShell):
                 mode="w",
             ) as f:
                 f.write(self.script())
+                if command:
+                    f.write(" ".join(command))
             return subprocess.Popen(
                 [self.executable(), *self.args(), f.name], env=self.env(), **kwargs
             )
