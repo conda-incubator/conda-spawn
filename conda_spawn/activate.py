@@ -1078,6 +1078,12 @@ class PowerShellActivator(_Activator):
         return "Remove-Variable CondaModuleArgs"
 
 
+class ShellActivator(PosixActivator):
+    pathsep_join = ";".join if on_win else ":".join
+    path_conversion = staticmethod(_path_identity)
+    run_script_tmpl = 'source "%s"'
+
+
 activator_map: dict[str, type[_Activator]] = {
     "posix": PosixActivator,
     "ash": PosixActivator,
@@ -1090,4 +1096,5 @@ activator_map: dict[str, type[_Activator]] = {
     "cmd.exe": CmdExeActivator,
     "fish": FishActivator,
     "powershell": PowerShellActivator,
+    "shell": ShellActivator,
 }

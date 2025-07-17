@@ -164,6 +164,41 @@ class ZshShell(PosixShell):
         return "zsh"
 
 
+class ShellShell(PosixShell):
+    Activator = activate.ShellActivator
+
+    def executable(self):
+        return "shell"
+
+    def args(self):
+        return ("--interact", "--norc")
+
+    def spawn_popen(
+        self, command: Iterable[str] | None = None, **kwargs
+    ) -> subprocess.Popen:
+        try:
+            with NamedTemporaryFile(
+                prefix="conda-spawn-",
+                suffix=self.Activator.script_extension,
+                delete=False,
+                mode="w",
+            ) as f:
+                f.write(self.script())
+                f.write(f"{self.prompt()}\n")
+                if command:
+                    f.write(" ".join(command))
+            return subprocess.Popen(
+                [self.executable(), *self.args(), f.name], env=self.env(), **kwargs
+            )
+        finally:
+            self._files_to_remove.append(f.name)
+
+    def spawn(self, command: Iterable[str] | None = None) -> int:
+        proc = self.spawn_popen(command)
+        proc.communicate()
+        return proc.wait()
+
+
 class CshShell(Shell):
     pass
 
@@ -260,6 +295,7 @@ SHELLS: dict[str, type[Shell]] = {
     "posix": PosixShell,
     "powershell": PowershellShell,
     "pwsh": PowershellShell,
+    "shell": ShellShell,
     "tcsh": CshShell,
     "xonsh": XonshShell,
     "zsh": ZshShell,
