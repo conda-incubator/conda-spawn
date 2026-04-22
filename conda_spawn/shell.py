@@ -104,6 +104,12 @@ class PosixShell(Shell):
     def args(self):
         return self.default_args
 
+    # Sentinel printed after activation to reliably detect when the
+    # spawned shell is ready.  Everything before this marker (including
+    # any initial prompt rendered with stale env vars) is consumed
+    # before ``interact()`` starts, preventing a duplicate prompt.
+    _READY_MARKER = "__CONDA_SPAWN_READY__"
+
     def spawn_tty(self, command: Iterable[str] | None = None) -> pexpect.spawn:
         def _sigwinch_passthrough(sig, data):
             # NOTE: Taken verbatim from pexpect's .interact() docstring.
@@ -117,7 +123,6 @@ class PosixShell(Shell):
             child.setwinsize(a[0], a[1])
 
         size = shutil.get_terminal_size()
-        executable = self.executable()
 
         child = pexpect.spawn(
             self.executable(),
@@ -135,16 +140,15 @@ class PosixShell(Shell):
             ) as f:
                 f.write(self.script())
             signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
-            # Source the activation script. We do this in a single line for performance.
-            # (It's slower to send several lines than paying the IO overhead).
-            # We set the PS1 prompt outside the script because it's otherwise invisible.
-            # stty echo is equivalent to `child.setecho(True)` but the latter didn't work
-            # reliably across all shells and OSs.
-            child.sendline(f' . "{f.name}" && {self.prompt()} && stty echo')
-            os.read(child.child_fd, 4096)  # consume buffer before interact
-            if Path(executable).name == "zsh":
-                # zsh also needs this for a truly silent activation
-                child.expect("\r\n")
+            # Source the activation script, set the prompt, re-enable echo,
+            # then print a ready marker.  Using printf (no trailing newline)
+            # lets expect_exact consume everything up to and including the
+            # marker without leaving stray characters in the buffer.
+            child.sendline(
+                f' . "{f.name}" && {self.prompt()} && stty echo'
+                f" && printf {self._READY_MARKER}"
+            )
+            child.expect_exact(self._READY_MARKER)
             if command:
                 child.sendline(shlex.join(command))
             if sys.stdin.isatty():
