@@ -97,6 +97,10 @@ python = "3.12.*"
 [tool.pixi.feature.py313.dependencies]
 python = "3.13.*"
 
+[tool.pixi.feature.py314]
+# Python 3.14 isn't on Anaconda defaults for osx-64 yet; drop Intel Mac from
+# the py314 feature so defaults rows in the test matrix can still resolve.
+platforms = ["linux-64", "osx-arm64", "win-64"]
 [tool.pixi.feature.py314.dependencies]
 python = "3.14.*"
 
