@@ -39,6 +39,36 @@ def test_posix_shell(simple_env):
     assert str(simple_env) in out
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
+def test_posix_shell_ready_marker_synchronization(simple_env):
+    """Regression test for the double-prompt fix (#22).
+
+    ``spawn_tty()`` prints a distinctive ready marker after the activation
+    script, the new ``PS1``, and ``stty echo`` have all been applied, and
+    then blocks on ``expect_exact`` until it sees that marker.  Because
+    ``expect_exact`` consumes everything up to *and including* the match,
+    any output the shell emitted before activation completed -- including
+    an initial prompt rendered from the parent process's (stale)
+    ``CONDA_DEFAULT_ENV``, which is what prompt tools like starship would
+    read -- ends up in ``child.before`` and is never forwarded to the
+    interactive user.
+
+    Refs conda-incubator/conda-workspaces#20.
+    """
+    shell = PosixShell(simple_env)
+    proc = shell.spawn_tty()
+    try:
+        marker = PosixShell._READY_MARKER
+        assert marker, "PosixShell must define a non-empty _READY_MARKER"
+        # expect_exact() leaves the matched literal in child.after; if
+        # someone removes the marker sync this assertion fails loudly
+        # instead of regressing to the old racy os.read()-based approach.
+        assert proc.after == marker.encode()
+    finally:
+        proc.sendeof()
+        proc.read()
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Powershell only tested on Windows")
 def test_powershell(simple_env):
     shell = PowershellShell(simple_env)
