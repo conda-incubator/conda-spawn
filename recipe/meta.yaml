@@ -18,19 +18,19 @@ build:
 
 requirements:
   host:
-    - python 3.9
+    - python 3.10
     - pip
     - hatchling >=1.12.2
     - hatch-vcs >=0.2.0
   run:
-    - python >=3.9
+    - python >=3.10
     - conda >=23.9.0
     - pexpect
     - shellingham
 
 test:
   requires:
-    - python 3.9
+    - python 3.10
   imports:
     - conda_spawn
     - conda_spawn.main
