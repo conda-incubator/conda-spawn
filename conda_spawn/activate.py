@@ -696,6 +696,11 @@ class _Activator(metaclass=abc.ABCMeta):
         if new_prefix is not None:
             path_list[first_idx:first_idx] = list(self._get_path_dirs(new_prefix))
 
+        # JRG: Mirror _add_prefix_to_path: keep $CONDA_ROOT/condabin at position 0
+        # so the base `conda` executable is never shadowed when swapping/removing
+        # prefixes (e.g. activate from CONDA_SHLVL>0, deactivate, reactivate).
+        self._ensure_root_condabin_is_first(path_list)
+
         return tuple(path_list)
 
     def _update_prompt(self, set_vars, conda_prompt_modifier):

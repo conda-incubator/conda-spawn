@@ -10,7 +10,9 @@ on:
       - ".github/workflows/test.yml"
       - "conda_spawn/**"
       - "tests/**"
+      - "pixi.lock"
       - "pyproject.toml"
+      - "recipe/**"
 
 concurrency:
   # Concurrency group that uses the workflow name and PR number if available
@@ -23,48 +25,62 @@ concurrency:
 
 jobs:
   tests:
-    name: ${{ matrix.os }}, py${{ matrix.python-version }}
+    name: ${{ matrix.os }}, py${{ matrix.python-version }}, ${{ matrix.channel }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["39", "310", "311", "312"]
+        channel: [defaults, conda-forge]
+        python-version: ["310", "311", "312", "313", "314"]
         include:
-          - os: macos-15-intel
-            python-version: "39"
           - os: macos-latest
+            channel: defaults
             python-version: "312"
+          - os: macos-latest
+            channel: conda-forge
+            python-version: "314"
     env:
       PIXI_ENV_NAME: test-py${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659 # v0.8.1
+      - name: Patch channels in pixi config
+        if: matrix.channel == 'defaults'
+        shell: bash
+        run: |
+          # Swap pixi's own channels to the Anaconda defaults repos.
+          sed -i.bak 's|channels = \["conda-forge"\]|channels = ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r", "https://repo.anaconda.com/pkgs/msys2"]|g' pyproject.toml
+          # Python 3.14 isn't on Anaconda defaults for osx-64 (Intel Mac) yet,
+          # so drop that platform from the workspace on defaults rows only.
+          # conda-forge rows keep the full four-platform set, including osx-64.
+          sed -i.bak 's|platforms = \["linux-64", "osx-64", "osx-arm64", "win-64"\]|platforms = ["linux-64", "osx-arm64", "win-64"]|' pyproject.toml
+          # Drop the conda-forge-resolved lockfile so setup-pixi regenerates it.
+          rm pixi.lock
+      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
           environments: ${{ env.PIXI_ENV_NAME }}
       - name: Setup project
+        shell: bash
         run: |
-          echo "channels: [conda-forge]" > .pixi/envs/${{ env.PIXI_ENV_NAME }}/.condarc
+          # Point the conda executable inside the pixi env at the same channel
+          # we're testing against.
+          echo "channels: [${{ matrix.channel }}]" > .pixi/envs/${{ env.PIXI_ENV_NAME }}/.condarc
           pixi run --environment ${{ env.PIXI_ENV_NAME }} conda info
       - name: Run tests
         run: pixi run --environment ${{ env.PIXI_ENV_NAME }} test --basetemp=${{ runner.os == 'Windows' && 'D:\\temp' || runner.temp }}
 
   build-conda:
-    name: Build conda package (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+    name: Build conda package
+    runs-on: ubuntu-latest
     env:
       PYTHONUNBUFFERED: "1"
     steps:
-      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - uses: prefix-dev/setup-pixi@ba3bb36eb2066252b2363392b7739741bb777659 # v0.8.1
+      - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
           environments: build
       - name: Build recipe
