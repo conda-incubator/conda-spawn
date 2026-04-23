@@ -50,9 +50,13 @@ jobs:
         if: matrix.channel == 'defaults'
         shell: bash
         run: |
-          # Swap pixi's own channels to the Anaconda defaults repos and drop
-          # the conda-forge-resolved lockfile so setup-pixi regenerates it.
+          # Swap pixi's own channels to the Anaconda defaults repos.
           sed -i.bak 's|channels = \["conda-forge"\]|channels = ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r", "https://repo.anaconda.com/pkgs/msys2"]|g' pyproject.toml
+          # Python 3.14 isn't on Anaconda defaults for osx-64 (Intel Mac) yet,
+          # so drop that platform from the workspace on defaults rows only.
+          # conda-forge rows keep the full four-platform set, including osx-64.
+          sed -i.bak 's|platforms = \["linux-64", "osx-64", "osx-arm64", "win-64"\]|platforms = ["linux-64", "osx-arm64", "win-64"]|' pyproject.toml
+          # Drop the conda-forge-resolved lockfile so setup-pixi regenerates it.
           rm pixi.lock
       - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
