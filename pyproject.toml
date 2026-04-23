@@ -53,6 +53,11 @@ conda-spawn = { path  = ".", editable = true }
 dependencies = { conda-build = "*" }
 tasks = { build = "conda build recipe" }
 
+[tool.pixi.feature.docs]
+channels = [
+  "conda-forge",  # Force it for docs; some packages aren't on defaults
+]
+
 [tool.pixi.feature.docs.tasks]
 docs = { cmd = "python -m sphinx.cmd.build -M dirhtml . _build", cwd = "docs" }
 serve = { cmd = "python -m http.server", cwd = "docs/_build/dirhtml" }
