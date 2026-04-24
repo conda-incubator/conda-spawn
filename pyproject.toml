@@ -85,7 +85,15 @@ pytest-mock = "*"
 conda-build = "*"
 pre-commit = "*"
 
+# fish/tcsh/xonsh power the new-shell tests.  They are not packaged for
+# win-64 on conda-forge, so scope them to Unix targets only; Windows
+# runs simply skip those tests via shutil.which() guards.
 [tool.pixi.feature.test.target.linux-64.dependencies]
+fish = "*"
+tcsh = "*"
+xonsh = "*"
+
+[tool.pixi.feature.test.target.osx-64.dependencies]
 fish = "*"
 tcsh = "*"
 xonsh = "*"
