@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -312,12 +313,22 @@ class XonshShell(UnixTTYShell):
         # ``.xsh`` is the canonical extension for xonsh scripts.
         return ".xsh"
 
+    def script(self) -> str:
+        # ``XonshActivator.unset_var_tmpl`` emits ``del $VAR`` which raises
+        # ``KeyError`` when the variable is not already set (e.g. on a fresh
+        # CI runner).  Replace every such line with the safe pop form.
+        raw = super().script()
+        return re.sub(
+            r"^del \$(\w+)$",
+            lambda m: f'${{...}}.pop("{m.group(1)}", None)',
+            raw,
+            flags=re.MULTILINE,
+        )
+
     def prompt(self) -> str:
         # Prepend ``CONDA_PROMPT_MODIFIER`` to ``$PROMPT`` while keeping
         # any format-field tokens in the user's prompt intact.
-        return (
-            "$PROMPT = ${...}.get('CONDA_PROMPT_MODIFIER', '') + $PROMPT"
-        )
+        return "$PROMPT = ${...}.get('CONDA_PROMPT_MODIFIER', '') + $PROMPT"
 
     def _source_command(self, script_path: str) -> str:
         return f'source "{script_path}"'

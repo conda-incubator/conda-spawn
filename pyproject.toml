@@ -84,19 +84,16 @@ pytest = "*"
 pytest-mock = "*"
 conda-build = "*"
 pre-commit = "*"
-xonsh = "*"
 
 [tool.pixi.feature.test.target.linux-64.dependencies]
 fish = "*"
 tcsh = "*"
-
-[tool.pixi.feature.test.target.osx-64.dependencies]
-fish = "*"
-tcsh = "*"
+xonsh = "*"
 
 [tool.pixi.feature.test.target.osx-arm64.dependencies]
 fish = "*"
 tcsh = "*"
+xonsh = "*"
 
 [tool.pixi.feature.py310.dependencies]
 python = "3.10.*"
