@@ -78,37 +78,97 @@ class Shell:
                 log.debug("Could not delete %s", path, exc_info=exc)
 
 
-class PosixShell(Shell):
-    Activator = activate.PosixActivator
-    default_shell = "/bin/sh"
-    default_args = ("-l", "-i")
+class UnixTTYShell(Shell):
+    """
+    Common base for Unix-like shells that ``conda spawn`` drives through a
+    pseudo-terminal with ``pexpect``.  Subclasses provide the per-shell
+    bits: ``Activator``, how to source a file, how to set the prompt, how
+    to print the ready marker, and what to strip from the activator's own
+    prompt output.
+    """
 
-    def spawn(self, command: Iterable[str] | None = None) -> int:
-        return self.spawn_tty(command).wait()
-
-    def script(self) -> str:
-        script = self._activator.execute()
-        lines = []
-        for line in script.splitlines(keepends=True):
-            if "PS1=" in line:
-                continue
-            lines.append(line)
-        return "".join(lines)
-
-    def prompt(self) -> str:
-        return f'PS1="{self.prompt_modifier()}${{PS1:-}}"'
-
-    def executable(self):
-        return os.environ.get("SHELL", self.default_shell)
-
-    def args(self):
-        return self.default_args
+    default_shell: str = "/bin/sh"
+    default_args: tuple[str, ...] = ("-l", "-i")
 
     # Sentinel printed after activation to reliably detect when the
     # spawned shell is ready.  Everything before this marker (including
     # any initial prompt rendered with stale env vars) is consumed
     # before `interact()` starts, preventing a duplicate prompt.
     _READY_MARKER = "__CONDA_SPAWN_READY__"
+
+    # Substrings that identify prompt-setting lines emitted by the
+    # activator; those lines are stripped from ``script()`` because
+    # ``prompt()`` installs its own, conda-spawn-friendly prompt.
+    _prompt_strip_markers: tuple[str, ...] = ()
+
+    def spawn(self, command: Iterable[str] | None = None) -> int:
+        return self.spawn_tty(command).wait()
+
+    def script(self) -> str:
+        """Activation script for this shell.
+
+        Mirrors the output of ``conda <shell>.activate`` for this shell
+        (stripped of the activator's own prompt handling where needed).
+        Used both by the ``conda spawn --hook`` flow and as the base
+        content of the temp file sourced by ``spawn_tty``.
+        """
+        script = self._activator.execute()
+        if not self._prompt_strip_markers:
+            return script
+        lines = [
+            line
+            for line in script.splitlines(keepends=True)
+            if not any(marker in line for marker in self._prompt_strip_markers)
+        ]
+        return "".join(lines)
+
+    def _spawn_script(self) -> str:
+        """
+        Full contents of the temp file the spawned shell will source:
+        activation + prompt setup + post-activation command + ready
+        marker.  Stuffing everything into a single sourced file lets
+        multi-line / multi-statement snippets (e.g. fish function defs,
+        xonsh Python statements) run without having to fit into one
+        ``sendline`` call.
+        """
+        parts = [self.script()]
+        for extra in (
+            self.prompt(),
+            self._post_activation_command(),
+            self._ready_marker_command(),
+        ):
+            if extra:
+                parts.append(extra)
+        return "\n".join(p.rstrip("\n") for p in parts) + "\n"
+
+    def prompt(self) -> str:
+        raise NotImplementedError
+
+    def executable(self) -> str:
+        return os.environ.get("SHELL", self.default_shell)
+
+    def args(self) -> tuple[str, ...]:
+        return self.default_args
+
+    @property
+    def _script_suffix(self) -> str:
+        """File suffix used for the temporary activation script."""
+        return self.Activator.script_extension
+
+    def _source_command(self, script_path: str) -> str:
+        """Command that sources ``script_path`` in this shell."""
+        raise NotImplementedError
+
+    def _post_activation_command(self) -> str:
+        """Run after activation; re-enables terminal echo by default."""
+        return "stty echo"
+
+    def _ready_marker_command(self) -> str:
+        """Print the ready marker with no trailing newline."""
+        return f"printf {self._READY_MARKER}"
+
+    def _commandline(self, script_path: str) -> str:
+        return self._source_command(script_path)
 
     def spawn_tty(self, command: Iterable[str] | None = None) -> pexpect.spawn:
         def _sigwinch_passthrough(sig, data):
@@ -134,22 +194,17 @@ class PosixShell(Shell):
         try:
             with NamedTemporaryFile(
                 prefix="conda-spawn-",
-                suffix=self.Activator.script_extension,
+                suffix=self._script_suffix,
                 delete=False,
                 mode="w",
             ) as f:
-                f.write(self.script())
-                # Append prompt setup, echo restore, and the ready marker
-                # to the *same* sourced file so the only thing we sendline
-                # is `. "<path>"`.  If the PTY's input echo is on when the
-                # sendline lands (e.g. zsh rc files / starship init flipped
-                # it back on), the echoed command no longer contains the
-                # marker text -- so it cannot leak through to interact().
-                f.write(f"\n{self.prompt()}\n")
-                f.write("stty echo\n")
-                f.write(f"printf {self._READY_MARKER}\n")
+                f.write(self._spawn_script())
             signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
-            child.sendline(f' . "{f.name}"')
+            # Source the activation script, set the prompt, re-enable echo,
+            # then print a ready marker.  ``expect_exact`` consumes
+            # everything up to and including the marker, so any stale
+            # initial prompt rendered before activation is discarded.
+            child.sendline(self._commandline(f.name))
             child.expect_exact(self._READY_MARKER)
             if command:
                 child.sendline(shlex.join(command))
@@ -158,6 +213,18 @@ class PosixShell(Shell):
             return child
         finally:
             self._files_to_remove.append(f.name)
+
+
+class PosixShell(UnixTTYShell):
+    Activator = activate.PosixActivator
+    default_shell = "/bin/sh"
+    _prompt_strip_markers = ("PS1=",)
+
+    def prompt(self) -> str:
+        return f'PS1="{self.prompt_modifier()}${{PS1:-}}"'
+
+    def _source_command(self, script_path: str) -> str:
+        return f'. "{script_path}"'
 
 
 class BashShell(PosixShell):
@@ -170,16 +237,101 @@ class ZshShell(PosixShell):
         return "zsh"
 
 
-class CshShell(Shell):
-    pass
+class FishShell(UnixTTYShell):
+    Activator = activate.FishActivator
+    default_shell = "fish"
+
+    def prompt(self) -> str:
+        # Preserve any pre-existing ``fish_prompt`` (including ones installed
+        # by prompt tools like starship) and prepend conda's prompt modifier
+        # so users see their env name regardless of their shell setup.
+        return (
+            "if functions -q fish_prompt\n"
+            "    if not functions -q __conda_spawn_orig_fish_prompt\n"
+            "        functions -c fish_prompt __conda_spawn_orig_fish_prompt\n"
+            "        functions -e fish_prompt\n"
+            "    end\n"
+            "end\n"
+            "function fish_prompt\n"
+            '    printf "%s" "$CONDA_PROMPT_MODIFIER"\n'
+            "    if functions -q __conda_spawn_orig_fish_prompt\n"
+            "        __conda_spawn_orig_fish_prompt\n"
+            "    end\n"
+            "end"
+        )
+
+    def _source_command(self, script_path: str) -> str:
+        return f'source "{script_path}"'
+
+    def executable(self) -> str:
+        return "fish"
 
 
-class XonshShell(Shell):
-    pass
+class CshShell(UnixTTYShell):
+    Activator = activate.CshActivator
+    default_shell = "csh"
+    default_args = ("-i",)
+    _prompt_strip_markers = ("set prompt=",)
+
+    def prompt(self) -> str:
+        # csh/tcsh do not define $prompt automatically in all modes; guard
+        # against "Undefined variable" by initialising it to "" if absent.
+        return (
+            'if (! $?prompt) set prompt = ""\n'
+            f'set prompt="{self.prompt_modifier()}${{prompt}}"'
+        )
+
+    def _source_command(self, script_path: str) -> str:
+        return f'source "{script_path}"'
+
+    def _ready_marker_command(self) -> str:
+        # csh does not ship a ``printf`` builtin; ``echo -n`` is portable
+        # across csh/tcsh on the platforms we support.
+        return f'echo -n "{self._READY_MARKER}"'
+
+    def executable(self) -> str:
+        return "csh"
 
 
-class FishShell(Shell):
-    pass
+class TcshShell(CshShell):
+    default_shell = "tcsh"
+
+    def executable(self) -> str:
+        return "tcsh"
+
+
+class XonshShell(UnixTTYShell):
+    Activator = activate.XonshActivator
+    default_shell = "xonsh"
+    default_args = ("-i",)
+
+    @property
+    def _script_suffix(self) -> str:
+        # The ``XonshActivator`` reports ``.sh`` (for bash-sourced
+        # ``activate.d`` scripts) but ``execute()`` emits xonsh syntax.
+        # ``.xsh`` is the canonical extension for xonsh scripts.
+        return ".xsh"
+
+    def prompt(self) -> str:
+        # Prepend ``CONDA_PROMPT_MODIFIER`` to ``$PROMPT`` while keeping
+        # any format-field tokens in the user's prompt intact.
+        return (
+            "$PROMPT = ${...}.get('CONDA_PROMPT_MODIFIER', '') + $PROMPT"
+        )
+
+    def _source_command(self, script_path: str) -> str:
+        return f'source "{script_path}"'
+
+    def _post_activation_command(self) -> str:
+        # In xonsh, bare ``stty echo`` is treated as subprocess but the
+        # explicit ``$[...]`` form is unambiguous inside a sourced script.
+        return "$[stty echo]"
+
+    def _ready_marker_command(self) -> str:
+        return f'print({self._READY_MARKER!r}, end="", flush=True)'
+
+    def executable(self) -> str:
+        return "xonsh"
 
 
 class PowershellShell(Shell):
@@ -274,7 +426,7 @@ SHELLS: dict[str, type[Shell]] = {
     "posix": PosixShell,
     "powershell": PowershellShell,
     "pwsh": PowershellShell,
-    "tcsh": CshShell,
+    "tcsh": TcshShell,
     "xonsh": XonshShell,
     "zsh": ZshShell,
 }
