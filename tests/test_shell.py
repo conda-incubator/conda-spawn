@@ -1,3 +1,4 @@
+import shutil
 import sys
 
 import pytest
@@ -5,7 +6,15 @@ from subprocess import PIPE, check_output
 
 from conda.base.context import reset_context
 
-from conda_spawn.shell import PosixShell, PowershellShell, CmdExeShell
+from conda_spawn.shell import (
+    CmdExeShell,
+    CshShell,
+    FishShell,
+    PosixShell,
+    PowershellShell,
+    TcshShell,
+    XonshShell,
+)
 
 
 @pytest.fixture(scope="session")
@@ -70,6 +79,89 @@ def test_posix_shell_ready_marker_synchronization(simple_env, request):
     # someone removes the marker sync this assertion fails loudly
     # instead of regressing to the old racy os.read()-based approach.
     assert proc.after == marker.encode()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
+@pytest.mark.skipif(shutil.which("fish") is None, reason="fish not installed")
+def test_fish_shell(simple_env):
+    shell = FishShell(simple_env)
+    proc = shell.spawn_tty()
+    proc.sendline("env")
+    proc.sendeof()
+    out = proc.read().decode(errors="replace")
+    assert "CONDA_SPAWN" in out
+    assert "CONDA_PREFIX" in out
+    assert str(simple_env) in out
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
+@pytest.mark.skipif(shutil.which("fish") is None, reason="fish not installed")
+def test_fish_shell_ready_marker_synchronization(simple_env):
+    """Regression test: FishShell must use the ready-marker sync approach."""
+    shell = FishShell(simple_env)
+    proc = shell.spawn_tty()
+    try:
+        marker = FishShell._READY_MARKER
+        assert marker, "FishShell must define a non-empty _READY_MARKER"
+        assert proc.after == marker.encode()
+    finally:
+        proc.sendeof()
+        proc.read()
+
+
+def _read_via_exit(proc, shell_name: str = "exit") -> str:
+    """Send 'exit' and collect all output until EOF.
+
+    csh/tcsh/xonsh do not exit on a single sendeof(), so we send an explicit
+    ``exit`` command and then wait for the process to terminate.
+    """
+    import pexpect
+
+    proc.sendline("exit")
+    try:
+        proc.expect(pexpect.EOF, timeout=15)
+    except pexpect.TIMEOUT:
+        proc.terminate(force=True)
+    return (proc.before or b"").decode(errors="replace")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
+@pytest.mark.skipif(shutil.which("csh") is None, reason="csh not installed")
+def test_csh_shell(simple_env):
+    shell = CshShell(simple_env)
+    proc = shell.spawn_tty()
+    proc.sendline("env")
+    out = _read_via_exit(proc)
+    assert "CONDA_SPAWN" in out
+    assert "CONDA_PREFIX" in out
+    assert str(simple_env) in out
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
+@pytest.mark.skipif(shutil.which("tcsh") is None, reason="tcsh not installed")
+def test_tcsh_shell(simple_env):
+    shell = TcshShell(simple_env)
+    proc = shell.spawn_tty()
+    proc.sendline("env")
+    out = _read_via_exit(proc)
+    assert "CONDA_SPAWN" in out
+    assert "CONDA_PREFIX" in out
+    assert str(simple_env) in out
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
+@pytest.mark.skipif(shutil.which("xonsh") is None, reason="xonsh not installed")
+def test_xonsh_shell(simple_env):
+    shell = XonshShell(simple_env)
+    proc = shell.spawn_tty()
+    proc.sendline(
+        "import os; print('\\n'.join(f'{k}={v}' for k,v in __xonsh__.env.items()"
+        " if k.startswith('CONDA_')))"
+    )
+    out = _read_via_exit(proc)
+    assert "CONDA_SPAWN" in out
+    assert "CONDA_PREFIX" in out
+    assert str(simple_env) in out
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Powershell only tested on Windows")
