@@ -72,14 +72,18 @@ class Shell:
         return env
 
     def __del__(self):
-        for path in self._files_to_remove:
+        # ``__init__`` may have failed before ``_files_to_remove`` was set
+        # (e.g. if a subclass forgot to declare ``Activator``).  Guard
+        # against that so the interpreter does not emit a spurious
+        # AttributeError during garbage collection.
+        for path in getattr(self, "_files_to_remove", ()):
             try:
                 os.unlink(path)
             except OSError as exc:
                 log.debug("Could not delete %s", path, exc_info=exc)
 
 
-class UnixTTYShell(Shell):
+class UnixShell(Shell):
     """
     Common base for Unix-like shells that ``conda spawn`` drives through a
     pseudo-terminal with ``pexpect``.  Subclasses provide the per-shell
@@ -216,7 +220,7 @@ class UnixTTYShell(Shell):
             self._files_to_remove.append(f.name)
 
 
-class PosixShell(UnixTTYShell):
+class PosixShell(UnixShell):
     Activator = activate.PosixActivator
     default_shell = "/bin/sh"
     prompt_strip_markers = ("PS1=",)
@@ -238,7 +242,7 @@ class ZshShell(PosixShell):
         return "zsh"
 
 
-class FishShell(UnixTTYShell):
+class FishShell(UnixShell):
     Activator = activate.FishActivator
     default_shell = "fish"
 
@@ -268,7 +272,7 @@ class FishShell(UnixTTYShell):
         return "fish"
 
 
-class CshShell(UnixTTYShell):
+class CshShell(UnixShell):
     Activator = activate.CshActivator
     default_shell = "csh"
     default_args = ("-i",)
@@ -301,7 +305,7 @@ class TcshShell(CshShell):
         return "tcsh"
 
 
-class XonshShell(UnixTTYShell):
+class XonshShell(UnixShell):
     Activator = activate.XonshActivator
     default_shell = "xonsh"
     default_args = ("-i",)

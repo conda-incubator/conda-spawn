@@ -7575,7 +7575,7 @@ packages:
   timestamp: 1751548225624
 - pypi: ./
   name: conda-spawn
-  version: 0.0.6.dev21+g4623cca67.d20260424
+  version: 0.0.6.dev23+g1c9500b55.d20260424
   sha256: 8e98bb2ac2e8271cc97560c5b813fd3bb891efaabb8a0368fac8884625a3f85e
   requires_dist:
   - pexpect
