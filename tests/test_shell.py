@@ -1,11 +1,14 @@
 import shutil
 import sys
 
+import pexpect
 import pytest
+import shellingham
 from subprocess import PIPE, check_output
 
 from conda.base.context import reset_context
 
+from conda_spawn import shell as shell_module
 from conda_spawn.shell import (
     BashShell,
     CmdExeShell,
@@ -121,8 +124,6 @@ def _read_via_exit(proc, shell_name: str = "exit") -> str:
     csh/tcsh/xonsh do not exit on a single sendeof(), so we send an explicit
     ``exit`` command and then wait for the process to terminate.
     """
-    import pexpect
-
     proc.sendline("exit")
     try:
         proc.expect(pexpect.EOF, timeout=15)
@@ -306,19 +307,30 @@ def test_condabin_first_cmd(simple_env, conda_env, no_prompt):
         assert out.index(f"{sys.prefix}\\condabin\\conda") < out.index(str(conda_env))
 
 
-# ---------------------------------------------------------------------------
-# Unit tests that do not need a real PTY.  These exercise the script /
-# prompt generation directly and therefore run on every platform, covering
-# code paths that the TTY-based tests skip on Windows.
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def fish_shell(simple_env):
+    return FishShell(simple_env)
 
 
-def test_bash_shell_executable(simple_env):
-    assert BashShell(simple_env).executable() == "bash"
+@pytest.fixture
+def xonsh_shell(simple_env):
+    return XonshShell(simple_env)
 
 
-def test_zsh_shell_executable(simple_env):
-    assert ZshShell(simple_env).executable() == "zsh"
+@pytest.mark.parametrize(
+    "cls, expected",
+    [
+        (BashShell, "bash"),
+        (ZshShell, "zsh"),
+        (FishShell, "fish"),
+        (CshShell, "csh"),
+        (TcshShell, "tcsh"),
+        (XonshShell, "xonsh"),
+    ],
+    ids=lambda x: x.__name__ if isinstance(x, type) else x,
+)
+def test_shell_executable(cls, expected, simple_env):
+    assert cls(simple_env).executable() == expected
 
 
 def test_default_shell_class():
@@ -328,9 +340,6 @@ def test_default_shell_class():
 
 def test_detect_shell_class_fallback_on_failure(monkeypatch):
     """If shellingham fails, detect_shell_class falls back to the default."""
-    import shellingham
-
-    from conda_spawn import shell as shell_module
 
     def _raise(*args, **kwargs):
         raise shellingham.ShellDetectionFailure("no shell")
@@ -341,26 +350,35 @@ def test_detect_shell_class_fallback_on_failure(monkeypatch):
 
 def test_detect_shell_class_unknown_returns_default(monkeypatch):
     """Unknown shell names fall back to the default class with a warning."""
-    from conda_spawn import shell as shell_module
-
     monkeypatch.setattr(
         shell_module.shellingham, "detect_shell", lambda: ("not-a-real-shell", "/x")
     )
     assert detect_shell_class() is default_shell_class()
 
 
-def test_detect_shell_class_known(monkeypatch):
-    from conda_spawn import shell as shell_module
-
+@pytest.mark.parametrize(
+    "shell_name, expected_cls",
+    [
+        ("bash", BashShell),
+        ("zsh", ZshShell),
+        ("fish", FishShell),
+        ("csh", CshShell),
+        ("tcsh", TcshShell),
+        ("xonsh", XonshShell),
+    ],
+)
+def test_detect_shell_class_known(monkeypatch, shell_name, expected_cls):
     monkeypatch.setattr(
-        shell_module.shellingham, "detect_shell", lambda: ("bash", "/bin/bash")
+        shell_module.shellingham,
+        "detect_shell",
+        lambda: (shell_name, f"/bin/{shell_name}"),
     )
-    assert detect_shell_class() is BashShell
+    assert detect_shell_class() is expected_cls
 
 
-def test_shells_registry_covers_all_supported_names():
-    """The SHELLS dispatch table must include every shell we claim to support."""
-    expected = {
+@pytest.mark.parametrize(
+    "name",
+    [
         "ash",
         "bash",
         "cmd",
@@ -374,27 +392,30 @@ def test_shells_registry_covers_all_supported_names():
         "tcsh",
         "xonsh",
         "zsh",
-    }
-    assert expected <= set(SHELLS)
+    ],
+)
+def test_shells_registry_covers_supported_name(name):
+    """The SHELLS dispatch table must include every shell we claim to support."""
+    assert name in SHELLS
 
 
-def test_fish_shell_prompt_preserves_existing_prompt(simple_env):
-    prompt = FishShell(simple_env).prompt()
+def test_fish_shell_prompt_preserves_existing_prompt(fish_shell):
+    prompt = fish_shell.prompt()
     # Copies any existing fish_prompt to a namespaced backup ...
     assert "__conda_spawn_orig_fish_prompt" in prompt
     # ... and prepends CONDA_PROMPT_MODIFIER to the new fish_prompt.
     assert '"$CONDA_PROMPT_MODIFIER"' in prompt
 
 
-def test_fish_shell_source_command_and_suffix(simple_env):
-    shell = FishShell(simple_env)
-    assert shell.source_command("/tmp/x.fish") == 'source "/tmp/x.fish"'
-    assert shell.script_suffix == ".fish"
+def test_fish_shell_source_command_and_suffix(fish_shell):
+    assert fish_shell.source_command("/tmp/x.fish") == 'source "/tmp/x.fish"'
+    assert fish_shell.script_suffix == ".fish"
 
 
-def test_csh_shell_prompt_guards_undefined_prompt(simple_env):
+@pytest.mark.parametrize("cls", [CshShell, TcshShell], ids=lambda c: c.__name__)
+def test_csh_family_prompt_guards_undefined_prompt(cls, simple_env):
     """Regression test: csh raises 'Undefined variable' without this guard."""
-    prompt = CshShell(simple_env).prompt()
+    prompt = cls(simple_env).prompt()
     assert 'if (! $?prompt) set prompt = ""' in prompt
     assert "set prompt=" in prompt
     # The guard must come before the assignment, otherwise the expansion
@@ -402,54 +423,56 @@ def test_csh_shell_prompt_guards_undefined_prompt(simple_env):
     assert prompt.index("if (! $?prompt)") < prompt.index("set prompt=")
 
 
-def test_csh_shell_ready_marker_uses_echo(simple_env):
+@pytest.mark.parametrize("cls", [CshShell, TcshShell], ids=lambda c: c.__name__)
+def test_csh_family_ready_marker_uses_echo(cls, simple_env):
     """csh has no printf builtin; echo -n is the portable alternative."""
-    assert CshShell(simple_env).ready_marker_command().startswith("echo -n ")
+    assert cls(simple_env).ready_marker_command().startswith("echo -n ")
 
 
-def test_tcsh_shell_inherits_csh_prompt(simple_env):
-    # TcshShell is a thin subclass of CshShell and must keep the guard.
-    assert 'if (! $?prompt) set prompt = ""' in TcshShell(simple_env).prompt()
-    assert TcshShell(simple_env).executable() == "tcsh"
-
-
-def test_xonsh_shell_rewrites_del_var(simple_env):
+def test_xonsh_shell_rewrites_del_var(xonsh_shell):
     """Regression test: bare `del $VAR` raises KeyError on fresh shells.
 
     The XonshShell.script() override must replace every such line with the
     safe ``${...}.pop("VAR", None)`` form.
     """
-    script = XonshShell(simple_env).script()
+    script = xonsh_shell.script()
     assert "del $" not in script
-    # The activator always emits these six unset lines; each should be
+    # The activator always emits these unset lines; each should be
     # rewritten.  Checking one representative confirms the regex works.
     assert '${...}.pop("CONDA_EXE", None)' in script
 
 
-def test_xonsh_shell_script_suffix_is_xsh(simple_env):
+def test_xonsh_shell_script_suffix_is_xsh(xonsh_shell):
     """The activator reports .sh but xonsh needs .xsh for correct parsing."""
-    assert XonshShell(simple_env).script_suffix == ".xsh"
+    assert xonsh_shell.script_suffix == ".xsh"
 
 
-def test_xonsh_shell_post_activation_uses_subproc_form(simple_env):
+def test_xonsh_shell_post_activation_uses_subproc_form(xonsh_shell):
     """Bare ``stty echo`` is ambiguous in xonsh; ``$[...]`` forces subproc."""
-    assert XonshShell(simple_env).post_activation_command() == "$[stty echo]"
+    assert xonsh_shell.post_activation_command() == "$[stty echo]"
 
 
-def test_xonsh_shell_ready_marker_uses_print(simple_env):
-    cmd = XonshShell(simple_env).ready_marker_command()
+def test_xonsh_shell_ready_marker_uses_print(xonsh_shell):
+    cmd = xonsh_shell.ready_marker_command()
     assert cmd.startswith("print(")
     assert "flush=True" in cmd
     assert "end=" in cmd
 
 
-def test_unix_shell_base_strips_prompt_markers(simple_env):
-    """PosixShell's ``prompt_strip_markers`` removes activator PS1 lines."""
-    assert PosixShell.prompt_strip_markers == ("PS1=",)
-    assert CshShell.prompt_strip_markers == ("set prompt=",)
-    # FishShell / XonshShell do not need stripping.
-    assert FishShell.prompt_strip_markers == ()
-    assert XonshShell.prompt_strip_markers == ()
+@pytest.mark.parametrize(
+    "cls, expected_markers",
+    [
+        (PosixShell, ("PS1=",)),
+        (CshShell, ("set prompt=",)),
+        (TcshShell, ("set prompt=",)),
+        (FishShell, ()),
+        (XonshShell, ()),
+    ],
+    ids=lambda x: x.__name__ if isinstance(x, type) else repr(x),
+)
+def test_prompt_strip_markers(cls, expected_markers):
+    """Each subclass must declare the activator lines it wants stripped."""
+    assert cls.prompt_strip_markers == expected_markers
 
 
 def test_unix_shell_is_abstract_enough_to_require_subclass(simple_env):
