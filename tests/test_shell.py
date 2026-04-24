@@ -73,8 +73,8 @@ def test_posix_shell_ready_marker_synchronization(simple_env, request):
 
     request.addfinalizer(_drain)
 
-    marker = PosixShell._READY_MARKER
-    assert marker, "PosixShell must define a non-empty _READY_MARKER"
+    marker = PosixShell.READY_MARKER
+    assert marker, "PosixShell must define a non-empty READY_MARKER"
     # expect_exact() leaves the matched literal in child.after; if
     # someone removes the marker sync this assertion fails loudly
     # instead of regressing to the old racy os.read()-based approach.
@@ -101,8 +101,8 @@ def test_fish_shell_ready_marker_synchronization(simple_env):
     shell = FishShell(simple_env)
     proc = shell.spawn_tty()
     try:
-        marker = FishShell._READY_MARKER
-        assert marker, "FishShell must define a non-empty _READY_MARKER"
+        marker = FishShell.READY_MARKER
+        assert marker, "FishShell must define a non-empty READY_MARKER"
         assert proc.after == marker.encode()
     finally:
         proc.sendeof()

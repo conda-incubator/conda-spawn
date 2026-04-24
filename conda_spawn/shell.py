@@ -95,12 +95,12 @@ class UnixTTYShell(Shell):
     # spawned shell is ready.  Everything before this marker (including
     # any initial prompt rendered with stale env vars) is consumed
     # before `interact()` starts, preventing a duplicate prompt.
-    _READY_MARKER = "__CONDA_SPAWN_READY__"
+    READY_MARKER = "__CONDA_SPAWN_READY__"
 
     # Substrings that identify prompt-setting lines emitted by the
     # activator; those lines are stripped from ``script()`` because
     # ``prompt()`` installs its own, conda-spawn-friendly prompt.
-    _prompt_strip_markers: tuple[str, ...] = ()
+    prompt_strip_markers: tuple[str, ...] = ()
 
     def spawn(self, command: Iterable[str] | None = None) -> int:
         return self.spawn_tty(command).wait()
@@ -114,12 +114,12 @@ class UnixTTYShell(Shell):
         content of the temp file sourced by ``spawn_tty``.
         """
         script = self._activator.execute()
-        if not self._prompt_strip_markers:
+        if not self.prompt_strip_markers:
             return script
         lines = [
             line
             for line in script.splitlines(keepends=True)
-            if not any(marker in line for marker in self._prompt_strip_markers)
+            if not any(marker in line for marker in self.prompt_strip_markers)
         ]
         return "".join(lines)
 
@@ -135,8 +135,8 @@ class UnixTTYShell(Shell):
         parts = [self.script()]
         for extra in (
             self.prompt(),
-            self._post_activation_command(),
-            self._ready_marker_command(),
+            self.post_activation_command(),
+            self.ready_marker_command(),
         ):
             if extra:
                 parts.append(extra)
@@ -152,24 +152,24 @@ class UnixTTYShell(Shell):
         return self.default_args
 
     @property
-    def _script_suffix(self) -> str:
+    def script_suffix(self) -> str:
         """File suffix used for the temporary activation script."""
         return self.Activator.script_extension
 
-    def _source_command(self, script_path: str) -> str:
+    def source_command(self, script_path: str) -> str:
         """Command that sources ``script_path`` in this shell."""
         raise NotImplementedError
 
-    def _post_activation_command(self) -> str:
+    def post_activation_command(self) -> str:
         """Run after activation; re-enables terminal echo by default."""
         return "stty echo"
 
-    def _ready_marker_command(self) -> str:
+    def ready_marker_command(self) -> str:
         """Print the ready marker with no trailing newline."""
-        return f"printf {self._READY_MARKER}"
+        return f"printf {self.READY_MARKER}"
 
     def _commandline(self, script_path: str) -> str:
-        return self._source_command(script_path)
+        return self.source_command(script_path)
 
     def spawn_tty(self, command: Iterable[str] | None = None) -> pexpect.spawn:
         def _sigwinch_passthrough(sig, data):
@@ -195,7 +195,7 @@ class UnixTTYShell(Shell):
         try:
             with NamedTemporaryFile(
                 prefix="conda-spawn-",
-                suffix=self._script_suffix,
+                suffix=self.script_suffix,
                 delete=False,
                 mode="w",
             ) as f:
@@ -206,7 +206,7 @@ class UnixTTYShell(Shell):
             # everything up to and including the marker, so any stale
             # initial prompt rendered before activation is discarded.
             child.sendline(self._commandline(f.name))
-            child.expect_exact(self._READY_MARKER)
+            child.expect_exact(self.READY_MARKER)
             if command:
                 child.sendline(shlex.join(command))
             if sys.stdin.isatty():
@@ -219,12 +219,12 @@ class UnixTTYShell(Shell):
 class PosixShell(UnixTTYShell):
     Activator = activate.PosixActivator
     default_shell = "/bin/sh"
-    _prompt_strip_markers = ("PS1=",)
+    prompt_strip_markers = ("PS1=",)
 
     def prompt(self) -> str:
         return f'PS1="{self.prompt_modifier()}${{PS1:-}}"'
 
-    def _source_command(self, script_path: str) -> str:
+    def source_command(self, script_path: str) -> str:
         return f'. "{script_path}"'
 
 
@@ -261,7 +261,7 @@ class FishShell(UnixTTYShell):
             "end"
         )
 
-    def _source_command(self, script_path: str) -> str:
+    def source_command(self, script_path: str) -> str:
         return f'source "{script_path}"'
 
     def executable(self) -> str:
@@ -272,7 +272,7 @@ class CshShell(UnixTTYShell):
     Activator = activate.CshActivator
     default_shell = "csh"
     default_args = ("-i",)
-    _prompt_strip_markers = ("set prompt=",)
+    prompt_strip_markers = ("set prompt=",)
 
     def prompt(self) -> str:
         # csh/tcsh do not define $prompt automatically in all modes; guard
@@ -282,13 +282,13 @@ class CshShell(UnixTTYShell):
             f'set prompt="{self.prompt_modifier()}${{prompt}}"'
         )
 
-    def _source_command(self, script_path: str) -> str:
+    def source_command(self, script_path: str) -> str:
         return f'source "{script_path}"'
 
-    def _ready_marker_command(self) -> str:
+    def ready_marker_command(self) -> str:
         # csh does not ship a ``printf`` builtin; ``echo -n`` is portable
         # across csh/tcsh on the platforms we support.
-        return f'echo -n "{self._READY_MARKER}"'
+        return f'echo -n "{self.READY_MARKER}"'
 
     def executable(self) -> str:
         return "csh"
@@ -307,7 +307,7 @@ class XonshShell(UnixTTYShell):
     default_args = ("-i",)
 
     @property
-    def _script_suffix(self) -> str:
+    def script_suffix(self) -> str:
         # The ``XonshActivator`` reports ``.sh`` (for bash-sourced
         # ``activate.d`` scripts) but ``execute()`` emits xonsh syntax.
         # ``.xsh`` is the canonical extension for xonsh scripts.
@@ -330,16 +330,16 @@ class XonshShell(UnixTTYShell):
         # any format-field tokens in the user's prompt intact.
         return "$PROMPT = ${...}.get('CONDA_PROMPT_MODIFIER', '') + $PROMPT"
 
-    def _source_command(self, script_path: str) -> str:
+    def source_command(self, script_path: str) -> str:
         return f'source "{script_path}"'
 
-    def _post_activation_command(self) -> str:
+    def post_activation_command(self) -> str:
         # In xonsh, bare ``stty echo`` is treated as subprocess but the
         # explicit ``$[...]`` form is unambiguous inside a sourced script.
         return "$[stty echo]"
 
-    def _ready_marker_command(self) -> str:
-        return f'print({self._READY_MARKER!r}, end="", flush=True)'
+    def ready_marker_command(self) -> str:
+        return f'print({self.READY_MARKER!r}, end="", flush=True)'
 
     def executable(self) -> str:
         return "xonsh"
