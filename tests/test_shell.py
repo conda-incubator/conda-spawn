@@ -61,14 +61,14 @@ def test_posix_shell(simple_env):
 def test_posix_shell_ready_marker_synchronization(simple_env, request):
     """Regression test for the double-prompt fix (#22).
 
-    ``spawn_tty()`` prints a distinctive ready marker after the activation
-    script, the new ``PS1``, and ``stty echo`` have all been applied, and
-    then blocks on ``expect_exact`` until it sees that marker.  Because
-    ``expect_exact`` consumes everything up to *and including* the match,
+    `spawn_tty()` prints a distinctive ready marker after the activation
+    script, the new `PS1`, and `stty echo` have all been applied, and
+    then blocks on `expect_exact` until it sees that marker.  Because
+    `expect_exact` consumes everything up to *and including* the match,
     any output the shell emitted before activation completed -- including
     an initial prompt rendered from the parent process's (stale)
-    ``CONDA_DEFAULT_ENV``, which is what prompt tools like starship would
-    read -- ends up in ``child.before`` and is never forwarded to the
+    `CONDA_DEFAULT_ENV`, which is what prompt tools like starship would
+    read -- ends up in `child.before` and is never forwarded to the
     interactive user.
 
     Refs conda-incubator/conda-workspaces#20.
@@ -122,7 +122,7 @@ def _read_via_exit(proc, shell_name: str = "exit") -> str:
     """Send 'exit' and collect all output until EOF.
 
     csh/tcsh/xonsh do not exit on a single sendeof(), so we send an explicit
-    ``exit`` command and then wait for the process to terminate.
+    `exit` command and then wait for the process to terminate.
     """
     proc.sendline("exit")
     try:
@@ -433,7 +433,7 @@ def test_xonsh_shell_rewrites_del_var(xonsh_shell):
     """Regression test: bare `del $VAR` raises KeyError on fresh shells.
 
     The XonshShell.script() override must replace every such line with the
-    safe ``${...}.pop("VAR", None)`` form.
+    safe `${...}.pop("VAR", None)` form.
     """
     script = xonsh_shell.script()
     assert "del $" not in script
@@ -448,7 +448,7 @@ def test_xonsh_shell_script_suffix_is_xsh(xonsh_shell):
 
 
 def test_xonsh_shell_post_activation_uses_subproc_form(xonsh_shell):
-    """Bare ``stty echo`` is ambiguous in xonsh; ``$[...]`` forces subproc."""
+    """Bare `stty echo` is ambiguous in xonsh; `$[...]` forces subproc."""
     assert xonsh_shell.post_activation_command() == "$[stty echo]"
 
 
@@ -476,7 +476,7 @@ def test_prompt_strip_markers(cls, expected_markers):
 
 
 def test_unix_shell_is_abstract_enough_to_require_subclass(simple_env):
-    """Instantiating UnixShell directly fails on the abstract ``Activator``.
+    """Instantiating UnixShell directly fails on the abstract `Activator`.
 
     UnixShell deliberately does not pick an Activator; it's the base class
     shared by PosixShell / FishShell / CshShell / XonshShell.

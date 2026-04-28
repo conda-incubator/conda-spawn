@@ -72,8 +72,8 @@ class Shell:
         return env
 
     def __del__(self):
-        # ``__init__`` may have failed before ``_files_to_remove`` was set
-        # (e.g. if a subclass forgot to declare ``Activator``).  Guard
+        # `__init__` may have failed before `_files_to_remove` was set
+        # (e.g. if a subclass forgot to declare `Activator`).  Guard
         # against that so the interpreter does not emit a spurious
         # AttributeError during garbage collection.
         for path in getattr(self, "_files_to_remove", ()):
@@ -85,9 +85,9 @@ class Shell:
 
 class UnixShell(Shell):
     """
-    Common base for Unix-like shells that ``conda spawn`` drives through a
-    pseudo-terminal with ``pexpect``.  Subclasses provide the per-shell
-    bits: ``Activator``, how to source a file, how to set the prompt, how
+    Common base for Unix-like shells that `conda spawn` drives through a
+    pseudo-terminal with `pexpect`.  Subclasses provide the per-shell
+    bits: `Activator`, how to source a file, how to set the prompt, how
     to print the ready marker, and what to strip from the activator's own
     prompt output.
     """
@@ -102,8 +102,8 @@ class UnixShell(Shell):
     READY_MARKER = "__CONDA_SPAWN_READY__"
 
     # Substrings that identify prompt-setting lines emitted by the
-    # activator; those lines are stripped from ``script()`` because
-    # ``prompt()`` installs its own, conda-spawn-friendly prompt.
+    # activator; those lines are stripped from `script()` because
+    # `prompt()` installs its own, conda-spawn-friendly prompt.
     prompt_strip_markers: tuple[str, ...] = ()
 
     def spawn(self, command: Iterable[str] | None = None) -> int:
@@ -112,10 +112,10 @@ class UnixShell(Shell):
     def script(self) -> str:
         """Activation script for this shell.
 
-        Mirrors the output of ``conda <shell>.activate`` for this shell
+        Mirrors the output of `conda <shell>.activate` for this shell
         (stripped of the activator's own prompt handling where needed).
-        Used both by the ``conda spawn --hook`` flow and as the base
-        content of the temp file sourced by ``spawn_tty``.
+        Used both by the `conda spawn --hook` flow and as the base
+        content of the temp file sourced by `spawn_tty`.
         """
         script = self._activator.execute()
         if not self.prompt_strip_markers:
@@ -134,7 +134,7 @@ class UnixShell(Shell):
         marker.  Stuffing everything into a single sourced file lets
         multi-line / multi-statement snippets (e.g. fish function defs,
         xonsh Python statements) run without having to fit into one
-        ``sendline`` call.
+        `sendline` call.
         """
         parts = [self.script()]
         for extra in (
@@ -161,7 +161,7 @@ class UnixShell(Shell):
         return self.Activator.script_extension
 
     def source_command(self, script_path: str) -> str:
-        """Command that sources ``script_path`` in this shell."""
+        """Command that sources `script_path` in this shell."""
         raise NotImplementedError
 
     def post_activation_command(self) -> str:
@@ -206,7 +206,7 @@ class UnixShell(Shell):
                 f.write(self._spawn_script())
             signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
             # Source the activation script, set the prompt, re-enable echo,
-            # then print a ready marker.  ``expect_exact`` consumes
+            # then print a ready marker.  `expect_exact` consumes
             # everything up to and including the marker, so any stale
             # initial prompt rendered before activation is discarded.
             child.sendline(self._commandline(f.name))
@@ -247,7 +247,7 @@ class FishShell(UnixShell):
     default_shell = "fish"
 
     def prompt(self) -> str:
-        # Preserve any pre-existing ``fish_prompt`` (including ones installed
+        # Preserve any pre-existing `fish_prompt` (including ones installed
         # by prompt tools like starship) and prepend conda's prompt modifier
         # so users see their env name regardless of their shell setup.
         return (
@@ -290,7 +290,7 @@ class CshShell(UnixShell):
         return f'source "{script_path}"'
 
     def ready_marker_command(self) -> str:
-        # csh does not ship a ``printf`` builtin; ``echo -n`` is portable
+        # csh does not ship a `printf` builtin; `echo -n` is portable
         # across csh/tcsh on the platforms we support.
         return f'echo -n "{self.READY_MARKER}"'
 
@@ -312,14 +312,14 @@ class XonshShell(UnixShell):
 
     @property
     def script_suffix(self) -> str:
-        # The ``XonshActivator`` reports ``.sh`` (for bash-sourced
-        # ``activate.d`` scripts) but ``execute()`` emits xonsh syntax.
-        # ``.xsh`` is the canonical extension for xonsh scripts.
+        # The `XonshActivator` reports `.sh` (for bash-sourced
+        # `activate.d` scripts) but `execute()` emits xonsh syntax.
+        # `.xsh` is the canonical extension for xonsh scripts.
         return ".xsh"
 
     def script(self) -> str:
-        # ``XonshActivator.unset_var_tmpl`` emits ``del $VAR`` which raises
-        # ``KeyError`` when the variable is not already set (e.g. on a fresh
+        # `XonshActivator.unset_var_tmpl` emits `del $VAR` which raises
+        # `KeyError` when the variable is not already set (e.g. on a fresh
         # CI runner).  Replace every such line with the safe pop form.
         raw = super().script()
         return re.sub(
@@ -330,7 +330,7 @@ class XonshShell(UnixShell):
         )
 
     def prompt(self) -> str:
-        # Prepend ``CONDA_PROMPT_MODIFIER`` to ``$PROMPT`` while keeping
+        # Prepend `CONDA_PROMPT_MODIFIER` to `$PROMPT` while keeping
         # any format-field tokens in the user's prompt intact.
         return "$PROMPT = ${...}.get('CONDA_PROMPT_MODIFIER', '') + $PROMPT"
 
@@ -338,8 +338,8 @@ class XonshShell(UnixShell):
         return f'source "{script_path}"'
 
     def post_activation_command(self) -> str:
-        # In xonsh, bare ``stty echo`` is treated as subprocess but the
-        # explicit ``$[...]`` form is unambiguous inside a sourced script.
+        # In xonsh, bare `stty echo` is treated as subprocess but the
+        # explicit `$[...]` form is unambiguous inside a sourced script.
         return "$[stty echo]"
 
     def ready_marker_command(self) -> str:
@@ -392,11 +392,11 @@ class PowershellShell(Shell):
         return "powershell"
 
     def args(self) -> tuple[str, ...]:
-        # ``-NoExit`` keeps PowerShell at its prompt after the activation
-        # script finishes, which is the whole point of ``conda spawn`` for
+        # `-NoExit` keeps PowerShell at its prompt after the activation
+        # script finishes, which is the whole point of `conda spawn` for
         # an interactive user.  Without a TTY on stdin (tests, pipelines)
         # we want PowerShell to exit cleanly once the script is done so the
-        # caller's ``communicate()`` returns instead of relying on a stdin-
+        # caller's `communicate()` returns instead of relying on a stdin-
         # EOF race that can blow past the test's timeout on slow runners.
         if sys.stdin.isatty():
             return ("-NoLogo", "-NoExit", "-File")
