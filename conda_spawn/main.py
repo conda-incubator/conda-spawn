@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from os.path import expanduser, expandvars, abspath
 from pathlib import Path
-from typing import Type, Iterable
+from typing import TYPE_CHECKING, Type, Iterable
 
 from conda.base.constants import ROOT_ENV_NAME
 from conda.base.context import context, locate_prefix_by_name
@@ -12,7 +12,9 @@ from conda.exceptions import DirectoryNotACondaEnvironmentError
 
 from .exceptions import ShellNotSupported
 from .registry import SHELLS, detect_shell_class
-from .shell import Shell
+
+if TYPE_CHECKING:
+    from .shell import Shell
 
 
 def spawn(

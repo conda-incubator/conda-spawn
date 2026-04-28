@@ -26,8 +26,8 @@ More information is available on our [documentation](https://conda-incubator.git
 
 `conda-spawn` distinguishes two tiers of shell support:
 
-- **Fully supported**: `bash`, `zsh`, `powershell`, `cmd`. Covered by CI on every push and actively maintained.
-- **Best-effort**: `fish`, `csh`/`tcsh`, `xonsh`. Provided to match `conda activate`'s own activator coverage so `conda-spawn` can replace it on systems that use those shells. They are lightly tested and we rely on user reports to catch shell-specific bugs.
+- **Fully supported**: `bash`, `zsh`, `powershell`, `cmd`. Implemented in `conda_spawn.shell`. Covered by CI on every push and actively maintained.
+- **Best-effort**: `fish`, `csh`/`tcsh`, `xonsh`. Implemented in `conda_spawn.contrib`. Provided to match `conda activate`'s own activator coverage so `conda-spawn` can replace it on systems that use those shells. They are lightly tested and we rely on user reports to catch shell-specific bugs.
 
 ## Contributing
 
