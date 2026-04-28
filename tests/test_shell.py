@@ -353,9 +353,7 @@ def test_detect_shell_class_fallback_on_failure(monkeypatch):
 
 def test_detect_shell_class_unknown_returns_default(monkeypatch):
     """Unknown shell names fall back to the default class with a warning."""
-    monkeypatch.setattr(
-        shellingham, "detect_shell", lambda: ("not-a-real-shell", "/x")
-    )
+    monkeypatch.setattr(shellingham, "detect_shell", lambda: ("not-a-real-shell", "/x"))
     assert detect_shell_class() is default_shell_class()
 
 
