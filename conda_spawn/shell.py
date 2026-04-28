@@ -243,6 +243,14 @@ class ZshShell(PosixShell):
 
 
 class FishShell(UnixShell):
+    """fish shell support.
+
+    Best-effort: not part of the core supported shell matrix (`bash`,
+    `zsh`, `powershell`, `cmd`). It exists to bring `conda spawn` to
+    parity with `conda activate`'s own activator coverage, but is
+    lightly tested and relies on user reports for shell-specific bugs.
+    """
+
     Activator = activate.FishActivator
     default_shell = "fish"
 
@@ -273,6 +281,14 @@ class FishShell(UnixShell):
 
 
 class CshShell(UnixShell):
+    """csh shell support.
+
+    Best-effort: not part of the core supported shell matrix (`bash`,
+    `zsh`, `powershell`, `cmd`). It exists to bring `conda spawn` to
+    parity with `conda activate`'s own activator coverage, but is
+    lightly tested and relies on user reports for shell-specific bugs.
+    """
+
     Activator = activate.CshActivator
     default_shell = "csh"
     default_args = ("-i",)
@@ -299,6 +315,11 @@ class CshShell(UnixShell):
 
 
 class TcshShell(CshShell):
+    """tcsh shell support.
+
+    Inherits the same best-effort caveat as `CshShell`.
+    """
+
     default_shell = "tcsh"
 
     def executable(self) -> str:
@@ -306,6 +327,14 @@ class TcshShell(CshShell):
 
 
 class XonshShell(UnixShell):
+    """xonsh shell support.
+
+    Best-effort: not part of the core supported shell matrix (`bash`,
+    `zsh`, `powershell`, `cmd`). It exists to bring `conda spawn` to
+    parity with `conda activate`'s own activator coverage, but is
+    lightly tested and relies on user reports for shell-specific bugs.
+    """
+
     Activator = activate.XonshActivator
     default_shell = "xonsh"
     default_args = ("-i",)
