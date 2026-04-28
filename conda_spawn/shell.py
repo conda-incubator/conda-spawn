@@ -107,7 +107,7 @@ class PosixShell(Shell):
     # Sentinel printed after activation to reliably detect when the
     # spawned shell is ready.  Everything before this marker (including
     # any initial prompt rendered with stale env vars) is consumed
-    # before ``interact()`` starts, preventing a duplicate prompt.
+    # before `interact()` starts, preventing a duplicate prompt.
     _READY_MARKER = "__CONDA_SPAWN_READY__"
 
     def spawn_tty(self, command: Iterable[str] | None = None) -> pexpect.spawn:
@@ -141,7 +141,7 @@ class PosixShell(Shell):
                 f.write(self.script())
             signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
             # Source the activation script, set the prompt, re-enable echo,
-            # then print a ready marker.  Using printf (no trailing newline)
+            # then print a ready marker. Using printf (no trailing newline)
             # lets expect_exact consume everything up to and including the
             # marker without leaving stray characters in the buffer.
             child.sendline(
