@@ -16,7 +16,7 @@ from conda.cli.conda_argparse import (
 
 
 def configure_parser(parser: argparse.ArgumentParser):
-    from .shell import SHELLS
+    from .registry import SHELLS
 
     add_parser_help(parser)
 

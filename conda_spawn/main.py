@@ -11,7 +11,8 @@ from conda.base.context import context, locate_prefix_by_name
 from conda.exceptions import DirectoryNotACondaEnvironmentError
 
 from .exceptions import ShellNotSupported
-from .shell import SHELLS, Shell, detect_shell_class
+from .registry import SHELLS, detect_shell_class
+from .shell import Shell
 
 
 def spawn(

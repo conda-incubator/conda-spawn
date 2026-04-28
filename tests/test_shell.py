@@ -8,21 +8,24 @@ from subprocess import PIPE, check_output
 
 from conda.base.context import reset_context
 
-from conda_spawn import shell as shell_module
+from conda_spawn.contrib import (
+    CshShell,
+    FishShell,
+    TcshShell,
+    XonshShell,
+)
+from conda_spawn.registry import (
+    SHELLS,
+    default_shell_class,
+    detect_shell_class,
+)
 from conda_spawn.shell import (
     BashShell,
     CmdExeShell,
-    CshShell,
-    FishShell,
     PosixShell,
     PowershellShell,
-    SHELLS,
-    TcshShell,
     UnixShell,
-    XonshShell,
     ZshShell,
-    default_shell_class,
-    detect_shell_class,
 )
 
 
@@ -344,14 +347,14 @@ def test_detect_shell_class_fallback_on_failure(monkeypatch):
     def _raise(*args, **kwargs):
         raise shellingham.ShellDetectionFailure("no shell")
 
-    monkeypatch.setattr(shell_module.shellingham, "detect_shell", _raise)
+    monkeypatch.setattr(shellingham, "detect_shell", _raise)
     assert detect_shell_class() is default_shell_class()
 
 
 def test_detect_shell_class_unknown_returns_default(monkeypatch):
     """Unknown shell names fall back to the default class with a warning."""
     monkeypatch.setattr(
-        shell_module.shellingham, "detect_shell", lambda: ("not-a-real-shell", "/x")
+        shellingham, "detect_shell", lambda: ("not-a-real-shell", "/x")
     )
     assert detect_shell_class() is default_shell_class()
 
@@ -369,7 +372,7 @@ def test_detect_shell_class_unknown_returns_default(monkeypatch):
 )
 def test_detect_shell_class_known(monkeypatch, shell_name, expected_cls):
     monkeypatch.setattr(
-        shell_module.shellingham,
+        shellingham,
         "detect_shell",
         lambda: (shell_name, f"/bin/{shell_name}"),
     )
