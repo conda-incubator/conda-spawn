@@ -18,8 +18,6 @@ if sys.platform != "win32":
 
     import pexpect
 
-import shellingham
-
 from . import activate
 
 
@@ -71,44 +69,108 @@ class Shell:
         return env
 
     def __del__(self):
-        for path in self._files_to_remove:
+        # `__init__` may have failed before `_files_to_remove` was set
+        # (e.g. if a subclass forgot to declare `Activator`).  Guard
+        # against that so the interpreter does not emit a spurious
+        # AttributeError during garbage collection.
+        for path in getattr(self, "_files_to_remove", ()):
             try:
                 os.unlink(path)
             except OSError as exc:
                 log.debug("Could not delete %s", path, exc_info=exc)
 
 
-class PosixShell(Shell):
-    Activator = activate.PosixActivator
-    default_shell = "/bin/sh"
-    default_args = ("-l", "-i")
+class UnixShell(Shell):
+    """
+    Common base for Unix-like shells that `conda spawn` drives through a
+    pseudo-terminal with `pexpect`.  Subclasses provide the per-shell
+    bits: `Activator`, how to source a file, how to set the prompt, how
+    to print the ready marker, and what to strip from the activator's own
+    prompt output.
+    """
 
-    def spawn(self, command: Iterable[str] | None = None) -> int:
-        return self.spawn_tty(command).wait()
-
-    def script(self) -> str:
-        script = self._activator.execute()
-        lines = []
-        for line in script.splitlines(keepends=True):
-            if "PS1=" in line:
-                continue
-            lines.append(line)
-        return "".join(lines)
-
-    def prompt(self) -> str:
-        return f'PS1="{self.prompt_modifier()}${{PS1:-}}"'
-
-    def executable(self):
-        return os.environ.get("SHELL", self.default_shell)
-
-    def args(self):
-        return self.default_args
+    default_shell: str = "/bin/sh"
+    default_args: tuple[str, ...] = ("-l", "-i")
 
     # Sentinel printed after activation to reliably detect when the
     # spawned shell is ready.  Everything before this marker (including
     # any initial prompt rendered with stale env vars) is consumed
     # before `interact()` starts, preventing a duplicate prompt.
-    _READY_MARKER = "__CONDA_SPAWN_READY__"
+    READY_MARKER = "__CONDA_SPAWN_READY__"
+
+    # Substrings that identify prompt-setting lines emitted by the
+    # activator; those lines are stripped from `script()` because
+    # `prompt()` installs its own, conda-spawn-friendly prompt.
+    prompt_strip_markers: tuple[str, ...] = ()
+
+    def spawn(self, command: Iterable[str] | None = None) -> int:
+        return self.spawn_tty(command).wait()
+
+    def script(self) -> str:
+        """Activation script for this shell.
+
+        Mirrors the output of `conda <shell>.activate` for this shell
+        (stripped of the activator's own prompt handling where needed).
+        Used both by the `conda spawn --hook` flow and as the base
+        content of the temp file sourced by `spawn_tty`.
+        """
+        script = self._activator.execute()
+        if not self.prompt_strip_markers:
+            return script
+        lines = [
+            line
+            for line in script.splitlines(keepends=True)
+            if not any(marker in line for marker in self.prompt_strip_markers)
+        ]
+        return "".join(lines)
+
+    def _spawn_script(self) -> str:
+        """
+        Full contents of the temp file the spawned shell will source:
+        activation + prompt setup + post-activation command + ready
+        marker.  Stuffing everything into a single sourced file lets
+        multi-line / multi-statement snippets (e.g. fish function defs,
+        xonsh Python statements) run without having to fit into one
+        `sendline` call.
+        """
+        parts = [self.script()]
+        for extra in (
+            self.prompt(),
+            self.post_activation_command(),
+            self.ready_marker_command(),
+        ):
+            if extra:
+                parts.append(extra)
+        return "\n".join(p.rstrip("\n") for p in parts) + "\n"
+
+    def prompt(self) -> str:
+        raise NotImplementedError
+
+    def executable(self) -> str:
+        return os.environ.get("SHELL", self.default_shell)
+
+    def args(self) -> tuple[str, ...]:
+        return self.default_args
+
+    @property
+    def script_suffix(self) -> str:
+        """File suffix used for the temporary activation script."""
+        return self.Activator.script_extension
+
+    def source_command(self, script_path: str) -> str:
+        """Command that sources `script_path` in this shell."""
+        raise NotImplementedError
+
+    def post_activation_command(self) -> str:
+        """Run after activation; re-enables terminal echo by default."""
+        return "stty echo"
+
+    def ready_marker_command(self) -> str:
+        """Print the ready marker with no trailing newline."""
+        return f"printf {self.READY_MARKER}"
+
+    def _commandline(self, script_path: str) -> str:
+        return self.source_command(script_path)
 
     def spawn_tty(self, command: Iterable[str] | None = None) -> pexpect.spawn:
         def _sigwinch_passthrough(sig, data):
@@ -134,23 +196,18 @@ class PosixShell(Shell):
         try:
             with NamedTemporaryFile(
                 prefix="conda-spawn-",
-                suffix=self.Activator.script_extension,
+                suffix=self.script_suffix,
                 delete=False,
                 mode="w",
             ) as f:
-                f.write(self.script())
-                # Append prompt setup, echo restore, and the ready marker
-                # to the *same* sourced file so the only thing we sendline
-                # is `. "<path>"`.  If the PTY's input echo is on when the
-                # sendline lands (e.g. zsh rc files / starship init flipped
-                # it back on), the echoed command no longer contains the
-                # marker text -- so it cannot leak through to interact().
-                f.write(f"\n{self.prompt()}\n")
-                f.write("stty echo\n")
-                f.write(f"printf {self._READY_MARKER}\n")
+                f.write(self._spawn_script())
             signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
-            child.sendline(f' . "{f.name}"')
-            child.expect_exact(self._READY_MARKER)
+            # Source the activation script, set the prompt, re-enable echo,
+            # then print a ready marker.  `expect_exact` consumes
+            # everything up to and including the marker, so any stale
+            # initial prompt rendered before activation is discarded.
+            child.sendline(self._commandline(f.name))
+            child.expect_exact(self.READY_MARKER)
             if command:
                 child.sendline(shlex.join(command))
             if sys.stdin.isatty():
@@ -158,6 +215,18 @@ class PosixShell(Shell):
             return child
         finally:
             self._files_to_remove.append(f.name)
+
+
+class PosixShell(UnixShell):
+    Activator = activate.PosixActivator
+    default_shell = "/bin/sh"
+    prompt_strip_markers = ("PS1=",)
+
+    def prompt(self) -> str:
+        return f'PS1="{self.prompt_modifier()}${{PS1:-}}"'
+
+    def source_command(self, script_path: str) -> str:
+        return f'. "{script_path}"'
 
 
 class BashShell(PosixShell):
@@ -168,18 +237,6 @@ class BashShell(PosixShell):
 class ZshShell(PosixShell):
     def executable(self):
         return "zsh"
-
-
-class CshShell(Shell):
-    pass
-
-
-class XonshShell(Shell):
-    pass
-
-
-class FishShell(Shell):
-    pass
 
 
 class PowershellShell(Shell):
@@ -225,11 +282,11 @@ class PowershellShell(Shell):
         return "powershell"
 
     def args(self) -> tuple[str, ...]:
-        # ``-NoExit`` keeps PowerShell at its prompt after the activation
-        # script finishes, which is the whole point of ``conda spawn`` for
+        # `-NoExit` keeps PowerShell at its prompt after the activation
+        # script finishes, which is the whole point of `conda spawn` for
         # an interactive user.  Without a TTY on stdin (tests, pipelines)
         # we want PowerShell to exit cleanly once the script is done so the
-        # caller's ``communicate()`` returns instead of relying on a stdin-
+        # caller's `communicate()` returns instead of relying on a stdin-
         # EOF race that can blow past the test's timeout on slow runners.
         if sys.stdin.isatty():
             return ("-NoLogo", "-NoExit", "-File")
@@ -261,39 +318,3 @@ class CmdExeShell(PowershellShell):
 
     def args(self) -> tuple[str, ...]:
         return ("/D", "/K")
-
-
-SHELLS: dict[str, type[Shell]] = {
-    "ash": PosixShell,
-    "bash": BashShell,
-    "cmd.exe": CmdExeShell,
-    "cmd": CmdExeShell,
-    "csh": CshShell,
-    "dash": PosixShell,
-    "fish": FishShell,
-    "posix": PosixShell,
-    "powershell": PowershellShell,
-    "pwsh": PowershellShell,
-    "tcsh": CshShell,
-    "xonsh": XonshShell,
-    "zsh": ZshShell,
-}
-
-
-def default_shell_class():
-    if sys.platform == "win32":
-        return CmdExeShell
-    return PosixShell
-
-
-def detect_shell_class():
-    try:
-        name, _ = shellingham.detect_shell()
-    except shellingham.ShellDetectionFailure:
-        return default_shell_class()
-    else:
-        try:
-            return SHELLS[name]
-        except KeyError:
-            log.warning("Did not recognize shell %s, returning default.", name)
-            return default_shell_class()

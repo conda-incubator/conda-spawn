@@ -25,20 +25,15 @@ concurrency:
 
 jobs:
   tests:
-    name: ${{ matrix.os }}, py${{ matrix.python-version }}, ${{ matrix.channel }}
+    name: ${{ matrix.os }}, py${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        channel: [defaults, conda-forge]
         python-version: ["310", "311", "312", "313", "314"]
         include:
           - os: macos-latest
-            channel: defaults
-            python-version: "312"
-          - os: macos-latest
-            channel: conda-forge
             python-version: "314"
     env:
       PIXI_ENV_NAME: test-py${{ matrix.python-version }}
@@ -46,27 +41,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: Patch channels in pixi config
-        if: matrix.channel == 'defaults'
-        shell: bash
-        run: |
-          # Swap pixi's own channels to the Anaconda defaults repos.
-          sed -i.bak 's|channels = \["conda-forge"\]|channels = ["https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r", "https://repo.anaconda.com/pkgs/msys2"]|g' pyproject.toml
-          # Python 3.14 isn't on Anaconda defaults for osx-64 (Intel Mac) yet,
-          # so drop that platform from the workspace on defaults rows only.
-          # conda-forge rows keep the full four-platform set, including osx-64.
-          sed -i.bak 's|platforms = \["linux-64", "osx-64", "osx-arm64", "win-64"\]|platforms = ["linux-64", "osx-arm64", "win-64"]|' pyproject.toml
-          # Drop the conda-forge-resolved lockfile so setup-pixi regenerates it.
-          rm pixi.lock
       - uses: prefix-dev/setup-pixi@1b2de7f3351f171c8b4dfeb558c639cb58ed4ec0 # v0.9.5
         with:
           environments: ${{ env.PIXI_ENV_NAME }}
       - name: Setup project
         shell: bash
         run: |
-          # Point the conda executable inside the pixi env at the same channel
-          # we're testing against.
-          echo "channels: [${{ matrix.channel }}]" > .pixi/envs/${{ env.PIXI_ENV_NAME }}/.condarc
+          echo "channels: [conda-forge]" > .pixi/envs/${{ env.PIXI_ENV_NAME }}/.condarc
           pixi run --environment ${{ env.PIXI_ENV_NAME }} conda info
       - name: Run tests
         run: pixi run --environment ${{ env.PIXI_ENV_NAME }} test --basetemp=${{ runner.os == 'Windows' && 'D:\\temp' || runner.temp }}

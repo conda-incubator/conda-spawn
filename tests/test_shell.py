@@ -5,13 +5,14 @@ from subprocess import PIPE, check_output
 
 from conda.base.context import reset_context
 
-from conda_spawn.shell import PosixShell, PowershellShell, CmdExeShell
-
-
-@pytest.fixture(scope="session")
-def simple_env(session_tmp_env):
-    with session_tmp_env() as prefix:
-        yield prefix
+from conda_spawn.shell import (
+    BashShell,
+    CmdExeShell,
+    PosixShell,
+    PowershellShell,
+    UnixShell,
+    ZshShell,
+)
 
 
 @pytest.fixture(scope="session")
@@ -43,14 +44,14 @@ def test_posix_shell(simple_env):
 def test_posix_shell_ready_marker_synchronization(simple_env, request):
     """Regression test for the double-prompt fix (#22).
 
-    ``spawn_tty()`` prints a distinctive ready marker after the activation
-    script, the new ``PS1``, and ``stty echo`` have all been applied, and
-    then blocks on ``expect_exact`` until it sees that marker.  Because
-    ``expect_exact`` consumes everything up to *and including* the match,
+    `spawn_tty()` prints a distinctive ready marker after the activation
+    script, the new `PS1`, and `stty echo` have all been applied, and
+    then blocks on `expect_exact` until it sees that marker.  Because
+    `expect_exact` consumes everything up to *and including* the match,
     any output the shell emitted before activation completed -- including
     an initial prompt rendered from the parent process's (stale)
-    ``CONDA_DEFAULT_ENV``, which is what prompt tools like starship would
-    read -- ends up in ``child.before`` and is never forwarded to the
+    `CONDA_DEFAULT_ENV`, which is what prompt tools like starship would
+    read -- ends up in `child.before` and is never forwarded to the
     interactive user.
 
     Refs conda-incubator/conda-workspaces#20.
@@ -64,8 +65,8 @@ def test_posix_shell_ready_marker_synchronization(simple_env, request):
 
     request.addfinalizer(_drain)
 
-    marker = PosixShell._READY_MARKER
-    assert marker, "PosixShell must define a non-empty _READY_MARKER"
+    marker = PosixShell.READY_MARKER
+    assert marker, "PosixShell must define a non-empty READY_MARKER"
     # expect_exact() leaves the matched literal in child.after; if
     # someone removes the marker sync this assertion fails loudly
     # instead of regressing to the old racy os.read()-based approach.
@@ -206,3 +207,37 @@ def test_condabin_first_cmd(simple_env, conda_env, no_prompt):
         proc.kill()
         assert not proc.poll()
         assert out.index(f"{sys.prefix}\\condabin\\conda") < out.index(str(conda_env))
+
+
+@pytest.mark.parametrize(
+    "cls, expected",
+    [
+        (BashShell, "bash"),
+        (ZshShell, "zsh"),
+    ],
+    ids=lambda x: x.__name__ if isinstance(x, type) else x,
+)
+def test_shell_executable(cls, expected, simple_env):
+    assert cls(simple_env).executable() == expected
+
+
+@pytest.mark.parametrize(
+    "cls, expected_markers",
+    [
+        (PosixShell, ("PS1=",)),
+    ],
+    ids=lambda x: x.__name__ if isinstance(x, type) else repr(x),
+)
+def test_prompt_strip_markers(cls, expected_markers):
+    """Each subclass must declare the activator lines it wants stripped."""
+    assert cls.prompt_strip_markers == expected_markers
+
+
+def test_unix_shell_is_abstract_enough_to_require_subclass(simple_env):
+    """Instantiating UnixShell directly fails on the abstract `Activator`.
+
+    UnixShell deliberately does not pick an Activator; it's the base class
+    shared by PosixShell / FishShell / CshShell / XonshShell.
+    """
+    with pytest.raises(AttributeError):
+        UnixShell(simple_env)
