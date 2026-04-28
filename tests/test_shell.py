@@ -40,7 +40,7 @@ def test_posix_shell(simple_env):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
-def test_posix_shell_ready_marker_synchronization(simple_env):
+def test_posix_shell_ready_marker_synchronization(simple_env, request):
     """Regression test for the double-prompt fix (#22).
 
     ``spawn_tty()`` prints a distinctive ready marker after the activation
@@ -57,16 +57,19 @@ def test_posix_shell_ready_marker_synchronization(simple_env):
     """
     shell = PosixShell(simple_env)
     proc = shell.spawn_tty()
-    try:
-        marker = PosixShell._READY_MARKER
-        assert marker, "PosixShell must define a non-empty _READY_MARKER"
-        # expect_exact() leaves the matched literal in child.after; if
-        # someone removes the marker sync this assertion fails loudly
-        # instead of regressing to the old racy os.read()-based approach.
-        assert proc.after == marker.encode()
-    finally:
+
+    def _drain():
         proc.sendeof()
         proc.read()
+
+    request.addfinalizer(_drain)
+
+    marker = PosixShell._READY_MARKER
+    assert marker, "PosixShell must define a non-empty _READY_MARKER"
+    # expect_exact() leaves the matched literal in child.after; if
+    # someone removes the marker sync this assertion fails loudly
+    # instead of regressing to the old racy os.read()-based approach.
+    assert proc.after == marker.encode()
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Powershell only tested on Windows")
