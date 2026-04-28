@@ -1,5 +1,5 @@
 """
-conda pip subcommand for CLI
+conda spawn subcommand for CLI.
 """
 
 from __future__ import annotations
