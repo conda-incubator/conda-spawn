@@ -225,7 +225,15 @@ class PowershellShell(Shell):
         return "powershell"
 
     def args(self) -> tuple[str, ...]:
-        return ("-NoLogo", "-NoExit", "-File")
+        # ``-NoExit`` keeps PowerShell at its prompt after the activation
+        # script finishes, which is the whole point of ``conda spawn`` for
+        # an interactive user.  Without a TTY on stdin (tests, pipelines)
+        # we want PowerShell to exit cleanly once the script is done so the
+        # caller's ``communicate()`` returns instead of relying on a stdin-
+        # EOF race that can blow past the test's timeout on slow runners.
+        if sys.stdin.isatty():
+            return ("-NoLogo", "-NoExit", "-File")
+        return ("-NoLogo", "-File")
 
     def env(self) -> dict[str, str]:
         env = os.environ.copy()
