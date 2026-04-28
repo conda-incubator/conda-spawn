@@ -139,15 +139,17 @@ class PosixShell(Shell):
                 mode="w",
             ) as f:
                 f.write(self.script())
+                # Append prompt setup, echo restore, and the ready marker
+                # to the *same* sourced file so the only thing we sendline
+                # is `. "<path>"`.  If the PTY's input echo is on when the
+                # sendline lands (e.g. zsh rc files / starship init flipped
+                # it back on), the echoed command no longer contains the
+                # marker text -- so it cannot leak through to interact().
+                f.write(f"\n{self.prompt()}\n")
+                f.write("stty echo\n")
+                f.write(f"printf {self._READY_MARKER}\n")
             signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
-            # Source the activation script, set the prompt, re-enable echo,
-            # then print a ready marker. Using printf (no trailing newline)
-            # lets expect_exact consume everything up to and including the
-            # marker without leaving stray characters in the buffer.
-            child.sendline(
-                f' . "{f.name}" && {self.prompt()} && stty echo'
-                f" && printf {self._READY_MARKER}"
-            )
+            child.sendline(f' . "{f.name}"')
             child.expect_exact(self._READY_MARKER)
             if command:
                 child.sendline(shlex.join(command))
