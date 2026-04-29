@@ -68,7 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Prototype release.
 
-[Unreleased]: https://github.com/conda-incubator/conda-spawn/compare/0.1.0...HEAD
 [0.1.0]: https://github.com/conda-incubator/conda-spawn/compare/0.0.5...0.1.0
 [0.0.5]: https://github.com/conda-incubator/conda-spawn/compare/0.0.4...0.0.5
 [0.0.4]: https://github.com/conda-incubator/conda-spawn/compare/0.0.3...0.0.4
