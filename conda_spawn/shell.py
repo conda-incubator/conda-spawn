@@ -18,6 +18,9 @@ if sys.platform != "win32":
 
     import pexpect
 
+from conda.base.context import context
+from conda.common.compat import on_win
+
 from . import activate
 
 
@@ -270,7 +273,17 @@ class PowershellShell(Shell):
         return proc.wait()
 
     def script(self) -> str:
-        return self._activator.execute()
+        script = self._activator.execute()
+        # On Windows, conda.bat (in condabin) silently no-ops for
+        # activate/deactivate in PowerShell. Define a conda function
+        # that routes to conda.exe so main_mock_activate fires as
+        # intended ("Run 'conda init'..."). We bake in the path from
+        # context.conda_exe because export_metavars=False means
+        # $Env:CONDA_EXE is not set during spawn activation.
+        if on_win:
+            conda_exe = context.conda_exe_vars_dict["CONDA_EXE"]
+            script += f'\r\nfunction conda {{ & "{conda_exe}" @args }}'
+        return script
 
     def prompt(self) -> str:
         return (
