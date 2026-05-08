@@ -156,7 +156,7 @@ def test_xonsh_shell_rewrites_del_var(xonsh_shell):
     script = xonsh_shell.script()
     assert "del $" not in script
     # The activator always emits these unset lines; each should be
-    # rewritten.  Checking one representative confirms the regex works.
+    # rewritten. Checking one representative confirms the regex works.
     assert '${...}.pop("CONDA_EXE", None)' in script
 
 

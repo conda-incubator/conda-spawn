@@ -70,7 +70,7 @@ class Shell:
 
     def __del__(self):
         # `__init__` may have failed before `_files_to_remove` was set
-        # (e.g. if a subclass forgot to declare `Activator`).  Guard
+        # (e.g. if a subclass forgot to declare `Activator`). Guard
         # against that so the interpreter does not emit a spurious
         # AttributeError during garbage collection.
         for path in getattr(self, "_files_to_remove", ()):
@@ -83,7 +83,7 @@ class Shell:
 class UnixShell(Shell):
     """
     Common base for Unix-like shells that `conda spawn` drives through a
-    pseudo-terminal with `pexpect`.  Subclasses provide the per-shell
+    pseudo-terminal with `pexpect`. Subclasses provide the per-shell
     bits: `Activator`, how to source a file, how to set the prompt, how
     to print the ready marker, and what to strip from the activator's own
     prompt output.
@@ -93,7 +93,7 @@ class UnixShell(Shell):
     default_args: tuple[str, ...] = ("-l", "-i")
 
     # Sentinel printed after activation to reliably detect when the
-    # spawned shell is ready.  Everything before this marker (including
+    # spawned shell is ready. Everything before this marker (including
     # any initial prompt rendered with stale env vars) is consumed
     # before `interact()` starts, preventing a duplicate prompt.
     READY_MARKER = "__CONDA_SPAWN_READY__"
@@ -128,7 +128,7 @@ class UnixShell(Shell):
         """
         Full contents of the temp file the spawned shell will source:
         activation + prompt setup + post-activation command + ready
-        marker.  Stuffing everything into a single sourced file lets
+        marker. Stuffing everything into a single sourced file lets
         multi-line / multi-statement snippets (e.g. fish function defs,
         xonsh Python statements) run without having to fit into one
         `sendline` call.
@@ -284,7 +284,7 @@ class PowershellShell(Shell):
     def args(self) -> tuple[str, ...]:
         # `-NoExit` keeps PowerShell at its prompt after the activation
         # script finishes, which is the whole point of `conda spawn` for
-        # an interactive user.  Without a TTY on stdin (tests, pipelines)
+        # an interactive user. Without a TTY on stdin (tests, pipelines)
         # we want PowerShell to exit cleanly once the script is done so the
         # caller's `communicate()` returns instead of relying on a stdin-
         # EOF race that can blow past the test's timeout on slow runners.

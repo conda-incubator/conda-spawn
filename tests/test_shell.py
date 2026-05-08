@@ -46,7 +46,7 @@ def test_posix_shell_ready_marker_synchronization(simple_env, request):
 
     `spawn_tty()` prints a distinctive ready marker after the activation
     script, the new `PS1`, and `stty echo` have all been applied, and
-    then blocks on `expect_exact` until it sees that marker.  Because
+    then blocks on `expect_exact` until it sees that marker. Because
     `expect_exact` consumes everything up to *and including* the match,
     any output the shell emitted before activation completed -- including
     an initial prompt rendered from the parent process's (stale)

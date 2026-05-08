@@ -2,7 +2,7 @@
 
 These shells are provided to bring `conda spawn` to parity with
 `conda activate`'s own activator coverage so it can replace
-`conda activate` on systems that use them.  They are lightly tested
+`conda activate` on systems that use them. They are lightly tested
 relative to the core supported matrix (`bash`, `zsh`, `powershell`,
 `cmd`) and rely on user reports for shell-specific bugs.
 """
@@ -122,7 +122,7 @@ class XonshShell(UnixShell):
     def script(self) -> str:
         # `XonshActivator.unset_var_tmpl` emits `del $VAR` which raises
         # `KeyError` when the variable is not already set (e.g. on a fresh
-        # CI runner).  Replace every such line with the safe pop form.
+        # CI runner). Replace every such line with the safe pop form.
         raw = super().script()
         return re.sub(
             r"^del \$(\w+)$",
