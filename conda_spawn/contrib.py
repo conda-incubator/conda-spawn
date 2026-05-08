@@ -10,6 +10,7 @@ relative to the core supported matrix (`bash`, `zsh`, `powershell`,
 from __future__ import annotations
 
 import re
+from typing import ClassVar
 
 from . import activate
 from .shell import UnixShell
@@ -111,6 +112,10 @@ class XonshShell(UnixShell):
     Activator = activate.XonshActivator
     default_shell = "xonsh"
     default_args = ("-i",)
+    # xonsh's readline/prompt_toolkit backend discards pending PTY input
+    # on startup, so the sendline fallback silently loses the activation
+    # script.  Using --rc injects it during xonsh's own rc-file loading.
+    supports_init_injection: ClassVar[bool] = True
 
     @property
     def script_suffix(self) -> str:
@@ -118,6 +123,22 @@ class XonshShell(UnixShell):
         # `activate.d` scripts) but `execute()` emits xonsh syntax.
         # `.xsh` is the canonical extension for xonsh scripts.
         return ".xsh"
+
+    def user_rc_preamble(self) -> str:
+        # --rc replaces xonsh's default rc files, so we manually source
+        # /etc/xonshrc and ~/.xonshrc before the activation script.
+        return (
+            "import os as _os\n"
+            "for _rc in ['/etc/xonshrc', _os.path.expanduser('~/.xonshrc')]:\n"
+            "    if _os.path.exists(_rc):\n"
+            "        source @(_rc)\n"
+            "del _rc, _os"
+        )
+
+    def write_init_injection(
+        self, script_path: str
+    ) -> tuple[tuple[str, ...], dict[str, str]] | None:
+        return (("--rc", script_path), {})
 
     def script(self) -> str:
         # `XonshActivator.unset_var_tmpl` emits `del $VAR` which raises

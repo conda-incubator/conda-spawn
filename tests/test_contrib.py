@@ -1,5 +1,7 @@
 import shutil
 import sys
+import time
+from tempfile import NamedTemporaryFile
 
 import pexpect
 import pytest
@@ -10,6 +12,7 @@ from conda_spawn.contrib import (
     TcshShell,
     XonshShell,
 )
+from conda_spawn.shell import UnixShell
 
 
 @pytest.fixture
@@ -90,17 +93,29 @@ def test_tcsh_shell(simple_env):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Pty's only available on Unix")
 @pytest.mark.skipif(shutil.which("xonsh") is None, reason="xonsh not installed")
-def test_xonsh_shell(simple_env):
+def test_xonsh_shell(simple_env, vt100_terminal):
     shell = XonshShell(simple_env)
-    proc = shell.spawn_tty()
-    proc.sendline(
-        "import os; print('\\n'.join(f'{k}={v}' for k,v in __xonsh__.env.items()"
-        " if k.startswith('CONDA_')))"
-    )
-    out = _read_via_exit(proc)
-    assert "CONDA_SPAWN" in out
-    assert "CONDA_PREFIX" in out
-    assert str(simple_env) in out
+    with NamedTemporaryFile(
+        prefix="conda-spawn-",
+        suffix=".xsh",
+        delete=False,
+        mode="w",
+    ) as f:
+        f.write(shell.spawn_script())
+
+    screen = vt100_terminal("xonsh", ["--rc", f.name, "-i"], shell.env())
+
+    # Poll the virtual screen until the env prefix appears in the
+    # prompt, proving CONDA_DEFAULT_ENV was set by the activation.
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        text = "\n".join(screen.display)
+        if str(simple_env) in text:
+            break
+        time.sleep(0.1)
+    else:
+        text = "\n".join(screen.display)
+        assert str(simple_env) in text, f"env not in screen:\n{text}"
 
 
 @pytest.mark.parametrize(
@@ -190,3 +205,27 @@ def test_xonsh_shell_ready_marker_uses_print(xonsh_shell):
 def test_prompt_strip_markers(cls, expected_markers):
     """Each subclass must declare the activator lines it wants stripped."""
     assert cls.prompt_strip_markers == expected_markers
+
+
+def test_xonsh_supports_init_injection():
+    assert XonshShell.supports_init_injection is True
+
+
+def test_xonsh_write_init_injection(xonsh_shell):
+    result = xonsh_shell.write_init_injection("/tmp/script.xsh")
+    assert result is not None
+    argv, env = result
+    assert argv == ("--rc", "/tmp/script.xsh")
+    assert env == {}
+
+
+def test_xonsh_user_rc_preamble(xonsh_shell):
+    preamble = xonsh_shell.user_rc_preamble()
+    assert "/etc/xonshrc" in preamble
+    assert ".xonshrc" in preamble
+
+
+def test_xonsh_spawn_script_includes_preamble(xonsh_shell):
+    script = xonsh_shell.spawn_script()
+    assert "import os as _os" in script
+    assert UnixShell.READY_MARKER in script

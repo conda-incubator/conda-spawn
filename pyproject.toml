@@ -84,6 +84,7 @@ pytest = "*"
 pytest-mock = "*"
 conda-build = "*"
 pre-commit = "*"
+pyte = ">=0.8"
 
 # fish/tcsh/xonsh power the new-shell tests.  They are not packaged for
 # win-64 on conda-forge, so scope them to Unix targets only; Windows
