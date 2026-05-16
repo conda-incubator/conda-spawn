@@ -10,7 +10,7 @@ import sys
 from tempfile import NamedTemporaryFile
 from logging import getLogger
 from pathlib import Path
-from typing import Iterable
+from typing import ClassVar, Iterable
 
 if sys.platform != "win32":
     import fcntl
@@ -91,6 +91,12 @@ class UnixShell(Shell):
 
     default_shell: str = "/bin/sh"
     default_args: tuple[str, ...] = ("-l", "-i")
+    # When True, the shell supports passing the activation script via
+    # a command-line flag (e.g. bash --rcfile, xonsh --rc) instead of
+    # a separate sendline after startup.  This eliminates a PTY
+    # round-trip and avoids race conditions with shells that discard
+    # typeahead input (like xonsh's readline backend).
+    supports_init_injection: ClassVar[bool] = False
 
     # Sentinel printed after activation to reliably detect when the
     # spawned shell is ready. Everything before this marker (including
@@ -124,7 +130,7 @@ class UnixShell(Shell):
         ]
         return "".join(lines)
 
-    def _spawn_script(self) -> str:
+    def spawn_script(self) -> str:
         """
         Full contents of the temp file the spawned shell will source:
         activation + prompt setup + post-activation command + ready
@@ -133,7 +139,11 @@ class UnixShell(Shell):
         xonsh Python statements) run without having to fit into one
         `sendline` call.
         """
-        parts = [self.script()]
+        parts = []
+        preamble = self.user_rc_preamble()
+        if preamble:
+            parts.append(preamble)
+        parts.append(self.script())
         for extra in (
             self.prompt(),
             self.post_activation_command(),
@@ -169,11 +179,22 @@ class UnixShell(Shell):
         """Print the ready marker with no trailing newline."""
         return f"printf {self.READY_MARKER}"
 
-    def _commandline(self, script_path: str) -> str:
-        return self.source_command(script_path)
+    def user_rc_preamble(self) -> str:
+        """Preamble sourcing the user's normal rc files.
+
+        Shells that use init injection override this so the activation
+        script re-creates the login/interactive startup the user expects.
+        """
+        return ""
+
+    def write_init_injection(
+        self, script_path: str
+    ) -> tuple[tuple[str, ...], dict[str, str]] | None:
+        """Return extra argv and env for init-injection launch, or None."""
+        return None
 
     def spawn_tty(self, command: Iterable[str] | None = None) -> pexpect.spawn:
-        def _sigwinch_passthrough(sig, data):
+        def resize_child(sig, data):
             # NOTE: Taken verbatim from pexpect's .interact() docstring.
             # Check for buggy platforms (see pexpect.setwinsize()).
             if "TIOCGWINSZ" in dir(termios):
@@ -186,13 +207,6 @@ class UnixShell(Shell):
 
         size = shutil.get_terminal_size()
 
-        child = pexpect.spawn(
-            self.executable(),
-            [*self.args()],
-            env=self.env(),
-            echo=False,
-            dimensions=(size.lines, size.columns),
-        )
         try:
             with NamedTemporaryFile(
                 prefix="conda-spawn-",
@@ -200,13 +214,43 @@ class UnixShell(Shell):
                 delete=False,
                 mode="w",
             ) as f:
-                f.write(self._spawn_script())
-            signal.signal(signal.SIGWINCH, _sigwinch_passthrough)
-            # Source the activation script, set the prompt, re-enable echo,
-            # then print a ready marker.  `expect_exact` consumes
-            # everything up to and including the marker, so any stale
-            # initial prompt rendered before activation is discarded.
-            child.sendline(self._commandline(f.name))
+                f.write(self.spawn_script())
+
+            injection = (
+                self.write_init_injection(f.name)
+                if self.supports_init_injection
+                else None
+            )
+
+            if injection is not None:
+                # Fast path: pass the activation script on the command line
+                # (e.g. bash --rcfile script.sh -i).  GNU long options must
+                # come before short options for bash to accept them.
+                extra_argv, extra_env = injection
+                env = self.env()
+                env.update(extra_env)
+                child = pexpect.spawn(
+                    self.executable(),
+                    [*extra_argv, *self.args()],
+                    env=env,
+                    echo=False,
+                    dimensions=(size.lines, size.columns),
+                )
+            else:
+                # Fallback: start the shell, then send the source command
+                # via sendline.  This requires a second PTY round-trip and
+                # can race with shells that flush their input buffer on
+                # startup (e.g. xonsh with prompt_toolkit).
+                child = pexpect.spawn(
+                    self.executable(),
+                    [*self.args()],
+                    env=self.env(),
+                    echo=False,
+                    dimensions=(size.lines, size.columns),
+                )
+                child.sendline(self.source_command(f.name))
+
+            signal.signal(signal.SIGWINCH, resize_child)
             child.expect_exact(self.READY_MARKER)
             if command:
                 child.sendline(shlex.join(command))
@@ -230,8 +274,31 @@ class PosixShell(UnixShell):
 
 
 class BashShell(PosixShell):
+    # Drop -l (login): bash ignores --rcfile in login mode.  The
+    # user_rc_preamble manually sources the login files instead.
+    default_args: tuple[str, ...] = ("-i",)
+    supports_init_injection: ClassVar[bool] = True
+
     def executable(self):
         return "bash"
+
+    def user_rc_preamble(self) -> str:
+        # Replicate bash's login-shell startup sequence since --rcfile
+        # requires non-login mode.  Sources /etc/profile, then the first
+        # of ~/.bash_profile / ~/.bash_login / ~/.profile that exists.
+        # ~/.bashrc is deliberately omitted: the profile files source it
+        # if the user wants it (most distros' .bash_profile does).
+        return (
+            "[ -r /etc/profile ] && . /etc/profile\n"
+            'for f in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do\n'
+            '  if [ -r "$f" ]; then . "$f"; break; fi\n'
+            "done"
+        )
+
+    def write_init_injection(
+        self, script_path: str
+    ) -> tuple[tuple[str, ...], dict[str, str]] | None:
+        return (("--rcfile", script_path), {})
 
 
 class ZshShell(PosixShell):

@@ -241,3 +241,57 @@ def test_unix_shell_is_abstract_enough_to_require_subclass(simple_env):
     """
     with pytest.raises(AttributeError):
         UnixShell(simple_env)
+
+
+@pytest.mark.parametrize(
+    "cls, expected",
+    [
+        (BashShell, True),
+        (PosixShell, False),
+        (ZshShell, False),
+    ],
+    ids=lambda x: x.__name__ if isinstance(x, type) else repr(x),
+)
+def test_supports_init_injection(cls, expected):
+    assert cls.supports_init_injection is expected
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [PosixShell, ZshShell],
+    ids=lambda x: x.__name__,
+)
+def test_write_init_injection_returns_none(cls, simple_env):
+    shell = cls(simple_env)
+    assert shell.write_init_injection("/tmp/fake.sh") is None
+
+
+def test_bash_write_init_injection(simple_env):
+    shell = BashShell(simple_env)
+    result = shell.write_init_injection("/tmp/script.sh")
+    assert result is not None
+    argv, env = result
+    assert argv == ("--rcfile", "/tmp/script.sh")
+    assert env == {}
+
+
+def test_bash_user_rc_preamble(simple_env):
+    shell = BashShell(simple_env)
+    preamble = shell.user_rc_preamble()
+    assert "/etc/profile" in preamble
+    assert ".bash_profile" in preamble
+    assert ".bash_login" in preamble
+    assert ".profile" in preamble
+    assert ".bashrc" not in preamble
+
+
+def test_bash_spawn_script_includes_preamble(simple_env):
+    shell = BashShell(simple_env)
+    script = shell.spawn_script()
+    assert script.startswith("[ -r /etc/profile ]")
+    assert UnixShell.READY_MARKER in script
+
+
+def test_bash_default_args(simple_env):
+    shell = BashShell(simple_env)
+    assert shell.args() == ("-i",)
